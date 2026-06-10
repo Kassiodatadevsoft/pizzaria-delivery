@@ -86,15 +86,15 @@ const CATEGORY_META = new Map([
 const HEADING_TO_SLUG = [
   [/PIZZAS TRADICIONAIS/, "pizzas-tradicionais"],
   [/PIZZAS DOCES/, "pizzas-doces"],
-  [/PORÇÕES/, "porcoes"],
+  [/POR/, "porcoes"],
   [/PRATOS EXECUTIVOS/, "pratos-executivos"],
   [/PETISCOS/, "petiscos"],
   [/CREMES ESPECIAIS/, "cremes-especiais"],
   [/APERITIVOS/, "aperitivos"],
   [/SUCOS/, "sucos"],
   [/REFRIGERANTES/, "refrigerantes"],
-  [/ÁGUAS/, "aguas"],
-  [/HAMBÚRGUERES/, "hamburgueres"],
+  [/GUAS/, "aguas"],
+  [/HAMB/, "hamburgueres"],
   [/BARCAS/, "barcas"],
   [/ENERGÉTICOS|DRINKS|CERVEJAS|CHOPP/, "skip"],
 ];
