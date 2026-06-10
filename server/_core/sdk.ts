@@ -257,6 +257,29 @@ class SDKServer {
   }
 
   async authenticateRequest(req: Request): Promise<AuthenticatedUser> {
+    if (!ENV.isProduction && ENV.appId === "local" && ENV.ownerOpenId === "local") {
+      const now = new Date();
+      await db.upsertUser({
+        openId: "local",
+        name: process.env.OWNER_NAME ?? "Admin",
+        role: "admin",
+        lastSignedIn: now,
+      });
+      const localUser = await db.getUserByOpenId("local");
+      if (localUser) return localUser;
+      return {
+        id: 0,
+        openId: "local",
+        name: process.env.OWNER_NAME ?? "Admin",
+        email: null,
+        loginMethod: "local",
+        role: "admin",
+        createdAt: now,
+        updatedAt: now,
+        lastSignedIn: now,
+      };
+    }
+
     // Regular authentication flow
     const cookies = this.parseCookies(req.headers.cookie);
     const sessionCookie = cookies.get(COOKIE_NAME);

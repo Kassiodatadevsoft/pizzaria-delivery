@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Eye, RefreshCw, Search, Truck } from "lucide-react";
+import { Eye, Printer, RefreshCw, Search, Truck } from "lucide-react";
 
 type OrderStatus = "received" | "preparing" | "out_for_delivery" | "delivered" | "cancelled";
 
@@ -33,6 +33,60 @@ const PAYMENT_LABELS: Record<string, string> = {
   card: "Cartao",
   pix: "PIX",
 };
+
+function formatCurrency(value: unknown) {
+  return Number(value ?? 0).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function printDocument(title: string, body: string, width = "80mm") {
+  const printWindow = window.open("", "_blank", "width=420,height=720");
+  if (!printWindow) {
+    toast.error("Nao foi possivel abrir a janela de impressao");
+    return;
+  }
+
+  printWindow.document.write(`
+    <!doctype html>
+    <html>
+      <head>
+        <title>${escapeHtml(title)}</title>
+        <style>
+          @page { size: ${width} auto; margin: 4mm; }
+          * { box-sizing: border-box; }
+          body { width: ${width}; margin: 0; color: #000; font-family: Consolas, "Courier New", monospace; font-size: 12px; }
+          .center { text-align: center; }
+          .right { text-align: right; }
+          .bold { font-weight: 700; }
+          .line { border-top: 1px dashed #000; margin: 8px 0; }
+          .row { display: flex; justify-content: space-between; gap: 8px; }
+          .muted { font-size: 11px; }
+          h1 { font-size: 16px; margin: 0 0 4px; }
+          p { margin: 2px 0; }
+          @media print { body { width: ${width}; } }
+        </style>
+      </head>
+      <body>${body}</body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => {
+    printWindow.print();
+    printWindow.close();
+  }, 250);
+}
 
 export default function AdminDelivery() {
   const utils = trpc.useUtils();
@@ -90,6 +144,55 @@ export default function AdminDelivery() {
       return matchesStatus && matchesSearch;
     });
   }, [filterStatus, orders, search]);
+
+  function printCoupon() {
+    if (!orderDetail) return;
+
+    const itemsHtml = orderDetail.items
+      .map((item) => `
+        <p class="bold">${escapeHtml(item.quantity)}x ${escapeHtml(item.pizzaName)}</p>
+        <div class="row muted">
+          <span>${escapeHtml(item.sizeLabel)}${item.crustLabel ? ` - Borda ${escapeHtml(item.crustLabel)}` : ""}</span>
+          <span>${formatCurrency(item.totalPrice)}</span>
+        </div>
+      `)
+      .join("");
+
+    printDocument(
+      `Pedido ${orderDetail.id}`,
+      `
+        <div class="center">
+          <h1>PIZZARIA PRIME</h1>
+          <p class="bold">PEDIDO #${escapeHtml(orderDetail.id)}</p>
+          <p>${escapeHtml(new Date(orderDetail.createdAt).toLocaleString("pt-BR"))}</p>
+        </div>
+        <div class="line"></div>
+        <p class="bold">Cliente</p>
+        <p>${escapeHtml(orderDetail.customerName)}</p>
+        ${orderDetail.customerPhone ? `<p>${escapeHtml(orderDetail.customerPhone)}</p>` : ""}
+        <div class="line"></div>
+        <p class="bold">Endereco</p>
+        <p>${escapeHtml(orderDetail.addressStreet)}, ${escapeHtml(orderDetail.addressNumber)}</p>
+        ${orderDetail.addressComplement ? `<p>${escapeHtml(orderDetail.addressComplement)}</p>` : ""}
+        <p>${escapeHtml(orderDetail.addressNeighborhood)} - ${escapeHtml(orderDetail.addressCity)}/${escapeHtml(orderDetail.addressState)}</p>
+        ${orderDetail.addressZip ? `<p>CEP ${escapeHtml(orderDetail.addressZip)}</p>` : ""}
+        <div class="line"></div>
+        <p class="bold">Itens</p>
+        ${itemsHtml}
+        <div class="line"></div>
+        <div class="row"><span>Subtotal</span><span>${formatCurrency(orderDetail.subtotal)}</span></div>
+        <div class="row"><span>Entrega</span><span>${formatCurrency(orderDetail.deliveryFee)}</span></div>
+        <div class="row bold"><span>Total</span><span>${formatCurrency(orderDetail.total)}</span></div>
+        <div class="line"></div>
+        <p><span class="bold">Pagamento:</span> ${escapeHtml(PAYMENT_LABELS[orderDetail.paymentMethod] ?? orderDetail.paymentMethod)}</p>
+        ${orderDetail.changeFor ? `<p><span class="bold">Troco:</span> ${formatCurrency(orderDetail.changeFor)}</p>` : ""}
+        <p><span class="bold">Status:</span> ${escapeHtml(STATUS_LABELS[orderDetail.status as OrderStatus] ?? orderDetail.status)}</p>
+        ${orderDetail.notes ? `<div class="line"></div><p class="bold">Observacoes</p><p>${escapeHtml(orderDetail.notes)}</p>` : ""}
+        <div class="line"></div>
+        <p class="center">Obrigado pela preferencia!</p>
+      `
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -208,7 +311,15 @@ export default function AdminDelivery() {
       <Dialog open={selectedId != null} onOpenChange={(open) => !open && setSelectedId(null)}>
         <DialogContent className="bg-card border-border max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Pedido #{orderDetail?.id}</DialogTitle>
+            <div className="flex items-center justify-between gap-3">
+              <DialogTitle>Pedido #{orderDetail?.id}</DialogTitle>
+              {orderDetail && (
+                <Button variant="outline" size="sm" onClick={printCoupon} className="border-border gap-2">
+                  <Printer className="w-4 h-4" />
+                  Imprimir cupom
+                </Button>
+              )}
+            </div>
           </DialogHeader>
           {orderDetail && (
             <div className="space-y-4 text-sm">
