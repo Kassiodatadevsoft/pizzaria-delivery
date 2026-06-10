@@ -154,7 +154,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   const pool = await getPool();
   if (!pool) return;
 
-  const role = user.role ?? (user.openId === ENV.ownerOpenId ? "admin" : "user");
+  const defaultRole = user.openId === ENV.ownerOpenId ? "admin" : "user";
+  const role = user.role ?? null;
   const lastSignedIn = user.lastSignedIn ?? new Date();
 
   await pool.request()
@@ -163,6 +164,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     .input("email", sql.NVarChar(320), user.email ?? null)
     .input("loginMethod", sql.NVarChar(64), user.loginMethod ?? null)
     .input("role", sql.NVarChar(20), role)
+    .input("defaultRole", sql.NVarChar(20), defaultRole)
     .input("lastSignedIn", sql.DateTime2, lastSignedIn)
     .query(`
       MERGE ${TABLES.users} AS target
@@ -172,12 +174,12 @@ export async function upsertUser(user: InsertUser): Promise<void> {
         name = COALESCE(@name, target.name),
         email = COALESCE(@email, target.email),
         loginMethod = COALESCE(@loginMethod, target.loginMethod),
-        role = @role,
+        role = COALESCE(@role, target.role, @defaultRole),
         lastSignedIn = @lastSignedIn,
         updatedAt = SYSUTCDATETIME()
       WHEN NOT MATCHED THEN
         INSERT (openId, name, email, loginMethod, role, lastSignedIn)
-        VALUES (@openId, @name, @email, @loginMethod, @role, @lastSignedIn);
+        VALUES (@openId, @name, @email, @loginMethod, COALESCE(@role, @defaultRole), @lastSignedIn);
     `);
 }
 

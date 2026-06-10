@@ -1,8 +1,10 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { nanoid } from "nanoid";
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { ENV } from "./_core/env";
+import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { notifyOwner } from "./_core/notification";
@@ -29,6 +31,7 @@ import {
   createApiKey,
   revokeApiKey,
   updateProductErpCode,
+  upsertUser,
 } from "./db";
 import { generateApiKey } from "./erpRouter";
 
@@ -83,6 +86,36 @@ export const appRouter = router({
 
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
+    login: publicProcedure
+      .input(
+        z.object({
+          username: z.string().min(1),
+          password: z.string().min(1),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        if (input.username !== ENV.adminUsername || input.password !== ENV.adminPassword) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Usuario ou senha invalidos." });
+        }
+
+        const now = new Date();
+        await upsertUser({
+          openId: "admin-local",
+          name: "Admin Prime",
+          role: "admin",
+          loginMethod: "password",
+          lastSignedIn: now,
+        });
+
+        const sessionToken = await sdk.createSessionToken("admin-local", {
+          name: "Admin Prime",
+          expiresInMs: ONE_YEAR_MS,
+        });
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+
+        return { success: true } as const;
+      }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });

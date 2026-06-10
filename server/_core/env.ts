@@ -5,6 +5,8 @@ export const ENV = {
   oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
   localAdminAccess: process.env.LOCAL_ADMIN_ACCESS === "true",
+  adminUsername: process.env.ADMIN_USERNAME ?? "",
+  adminPassword: process.env.ADMIN_PASSWORD ?? "",
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
