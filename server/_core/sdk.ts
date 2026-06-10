@@ -257,7 +257,7 @@ class SDKServer {
   }
 
   async authenticateRequest(req: Request): Promise<AuthenticatedUser> {
-    if (!ENV.isProduction && ENV.appId === "local" && ENV.ownerOpenId === "local") {
+    if (ENV.localAdminAccess && ENV.appId === "local" && ENV.ownerOpenId === "local") {
       const now = new Date();
       await db.upsertUser({
         openId: "local",

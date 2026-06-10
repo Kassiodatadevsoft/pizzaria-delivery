@@ -54,9 +54,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen flex bg-background">
       {/* Sidebar */}
-      <aside className="w-64 bg-card border-r border-border flex flex-col fixed h-full z-40">
+      <aside className="w-64 bg-card border-r border-border flex flex-col fixed h-screen z-40">
         {/* Logo */}
-        <div className="p-6 border-b border-border">
+        <div className="shrink-0 p-6 border-b border-border">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
               <ChefHat className="w-5 h-5 text-primary" />
@@ -69,7 +69,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="flex-1 min-h-0 overflow-y-auto p-4 space-y-1">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = location === item.href || (item.href === "/admin/pedidos" && location === "/admin");
@@ -83,15 +83,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 }`}
               >
-                <Icon className="w-4 h-4" />
-                {item.label}
+                <Icon className="w-4 h-4 shrink-0" />
+                <span className="truncate">{item.label}</span>
               </Link>
             );
           })}
         </nav>
 
         {/* Footer */}
-        <div className="p-4 border-t border-border space-y-1">
+        <div className="shrink-0 p-4 border-t border-border space-y-1">
           <Link
             href="/"
             className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-all"
