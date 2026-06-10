@@ -1,12 +1,13 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
 import { Link } from "wouter";
-import { ShoppingBag, UtensilsCrossed, LogOut, Home, ChefHat, MessageCircle, Key } from "lucide-react";
+import { ShoppingBag, UtensilsCrossed, LogOut, Home, ChefHat, MessageCircle, Key, Truck } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 
 const NAV_ITEMS = [
   { href: "/admin/pedidos", label: "Pedidos", icon: ShoppingBag },
+  { href: "/admin/delivery", label: "Delivery Online", icon: Truck },
   { href: "/admin/cardapio", label: "Cardápio", icon: UtensilsCrossed },
   { href: "/admin/compartilhar", label: "Compartilhar Link", icon: MessageCircle },
   { href: "/admin/api-keys", label: "API Keys (ERP)", icon: Key },
