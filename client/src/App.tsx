@@ -12,6 +12,7 @@ import OrderTracking from "./pages/OrderTracking";
 import MyOrders from "./pages/MyOrders";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminOrders from "./pages/admin/AdminOrders";
+import AdminDelivery from "./pages/admin/AdminDelivery";
 import AdminMenu from "./pages/admin/AdminMenu";
 import ShareLink from "./pages/ShareLink";
 import AdminApiKeys from "./pages/admin/AdminApiKeys";
@@ -28,6 +29,7 @@ function Router() {
       <Route path="/meus-pedidos" component={MyOrders} />
       <Route path="/admin" component={() => <AdminLayout><AdminOrders /></AdminLayout>} />
       <Route path="/admin/pedidos" component={() => <AdminLayout><AdminOrders /></AdminLayout>} />
+      <Route path="/admin/delivery" component={() => <AdminLayout><AdminDelivery /></AdminLayout>} />
       <Route path="/admin/cardapio" component={() => <AdminLayout><AdminMenu /></AdminLayout>} />
       <Route path="/admin/compartilhar" component={() => <AdminLayout><ShareLink /></AdminLayout>} />
       <Route path="/admin/api-keys" component={() => <AdminLayout><AdminApiKeys /></AdminLayout>} />
