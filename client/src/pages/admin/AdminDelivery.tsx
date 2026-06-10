@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Eye, Printer, RefreshCw, Search, Truck } from "lucide-react";
+import { ChefHat, Eye, Printer, RefreshCw, Search, Truck } from "lucide-react";
 
 type OrderStatus = "received" | "preparing" | "out_for_delivery" | "delivered" | "cancelled";
 
@@ -72,6 +72,7 @@ function printDocument(title: string, body: string, width = "80mm") {
           .line { border-top: 1px dashed #000; margin: 8px 0; }
           .row { display: flex; justify-content: space-between; gap: 8px; }
           .muted { font-size: 11px; }
+          .large { font-size: 14px; }
           h1 { font-size: 16px; margin: 0 0 4px; }
           p { margin: 2px 0; }
           @media print { body { width: ${width}; } }
@@ -190,6 +191,45 @@ export default function AdminDelivery() {
         ${orderDetail.notes ? `<div class="line"></div><p class="bold">Observacoes</p><p>${escapeHtml(orderDetail.notes)}</p>` : ""}
         <div class="line"></div>
         <p class="center">Obrigado pela preferencia!</p>
+      `
+    );
+  }
+
+  function printKitchenOrder() {
+    if (!orderDetail) return;
+
+    const itemsHtml = orderDetail.items
+      .map((item) => `
+        <p class="bold large">${escapeHtml(item.quantity)}x ${escapeHtml(item.pizzaName)}</p>
+        <p class="muted">${escapeHtml(item.sizeLabel)}${item.crustLabel ? ` - Borda ${escapeHtml(item.crustLabel)}` : ""}</p>
+      `)
+      .join("");
+
+    printDocument(
+      `Cozinha pedido ${orderDetail.id}`,
+      `
+        <div class="center">
+          <h1>COZINHA</h1>
+          <p class="bold large">PEDIDO #${escapeHtml(orderDetail.id)}</p>
+          <p>${escapeHtml(new Date(orderDetail.createdAt).toLocaleString("pt-BR"))}</p>
+        </div>
+        <div class="line"></div>
+        <p><span class="bold">Cliente:</span> ${escapeHtml(orderDetail.customerName)}</p>
+        <p><span class="bold">Telefone:</span> ${escapeHtml(orderDetail.customerPhone || "-")}</p>
+        <p><span class="bold">Status:</span> ${escapeHtml(STATUS_LABELS[orderDetail.status as OrderStatus] ?? orderDetail.status)}</p>
+        <div class="line"></div>
+        <p class="bold center">ITENS PARA PREPARO</p>
+        ${itemsHtml}
+        ${
+          orderDetail.notes
+            ? `<div class="line"></div><p class="bold large">OBSERVACOES DO PEDIDO</p><p class="large">${escapeHtml(orderDetail.notes)}</p>`
+            : ""
+        }
+        <div class="line"></div>
+        <p class="bold">Entrega</p>
+        <p>${escapeHtml(orderDetail.addressStreet)}, ${escapeHtml(orderDetail.addressNumber)}</p>
+        ${orderDetail.addressComplement ? `<p>${escapeHtml(orderDetail.addressComplement)}</p>` : ""}
+        <p>${escapeHtml(orderDetail.addressNeighborhood)} - ${escapeHtml(orderDetail.addressCity)}/${escapeHtml(orderDetail.addressState)}</p>
       `
     );
   }
@@ -314,10 +354,16 @@ export default function AdminDelivery() {
             <div className="flex items-center justify-between gap-3">
               <DialogTitle>Pedido #{orderDetail?.id}</DialogTitle>
               {orderDetail && (
-                <Button variant="outline" size="sm" onClick={printCoupon} className="border-border gap-2">
-                  <Printer className="w-4 h-4" />
-                  Imprimir cupom
-                </Button>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button variant="outline" size="sm" onClick={printKitchenOrder} className="border-border gap-2">
+                    <ChefHat className="w-4 h-4" />
+                    Enviar cozinha
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={printCoupon} className="border-border gap-2">
+                    <Printer className="w-4 h-4" />
+                    Imprimir cupom
+                  </Button>
+                </div>
               )}
             </div>
           </DialogHeader>

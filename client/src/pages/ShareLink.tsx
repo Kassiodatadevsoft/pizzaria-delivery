@@ -5,11 +5,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
+const PUBLIC_SITE_URL =
+  import.meta.env.VITE_PUBLIC_SITE_URL || "https://prime.educdata.com.br/";
+
+function normalizePublicUrl(url: string) {
+  const trimmedUrl = url.trim();
+  return trimmedUrl.endsWith("/") ? trimmedUrl : `${trimmedUrl}/`;
+}
+
 export default function ShareLink() {
   const [copied, setCopied] = useState(false);
   const [clientName, setClientName] = useState("");
 
-  const baseUrl = window.location.origin;
+  const baseUrl = normalizePublicUrl(PUBLIC_SITE_URL);
 
   const buildMessage = () => {
     const greeting = clientName.trim()
