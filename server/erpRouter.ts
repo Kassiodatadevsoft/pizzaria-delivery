@@ -41,6 +41,7 @@ function formatOrder(order: any, items: any[]) {
     forma_pagamento: order.paymentMethod,
     troco_para: order.changeFor ? Number(order.changeFor) : null,
     subtotal: Number(order.subtotal),
+    tipo_frete: order.deliveryType || null,
     taxa_entrega: Number(order.deliveryFee),
     total: Number(order.total),
     observacoes: order.notes || null,
@@ -141,6 +142,10 @@ function normalizeExternalOrder(body: any) {
 
   const subtotal = numberValue(body.subtotal) ?? items.reduce((sum, item) => sum + Number(item.totalPrice), 0);
   const deliveryFee = numberValue(body.taxa_entrega ?? body.deliveryFee ?? body.delivery_fee) ?? 0;
+  const requestedDeliveryType = stringValue(body.tipo_frete ?? body.deliveryType ?? body.delivery_type);
+  const deliveryType = requestedDeliveryType === "KM 100" || requestedDeliveryType === "KM 2"
+    ? requestedDeliveryType
+    : deliveryFee === 7 ? "KM 100" : "KM 2";
   const total = numberValue(body.total) ?? subtotal + deliveryFee;
   const externalId = stringValue(body.delivery_order_id ?? body.external_id ?? body.externalId);
   const notes = stringValue(body.observacoes ?? body.notes);
@@ -162,6 +167,7 @@ function normalizeExternalOrder(body: any) {
       paymentMethod: (body.forma_pagamento ?? body.paymentMethod ?? "card") as "cash" | "card" | "pix",
       changeFor: changeFor !== undefined ? String(changeFor.toFixed(2)) : null,
       subtotal: String(subtotal.toFixed(2)),
+      deliveryType,
       deliveryFee: String(deliveryFee.toFixed(2)),
       total: String(total.toFixed(2)),
       status: "received" as const,

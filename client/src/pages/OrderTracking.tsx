@@ -173,8 +173,8 @@ export default function OrderTracking() {
                 <span>R$ {Number(data.subtotal).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm text-muted-foreground">
-                <span>Entrega</span>
-                <span>R$ {Number(data.deliveryFee).toFixed(2)}</span>
+                <span>Taxa de entrega</span>
+                <span>{data.deliveryType || (Number(data.deliveryFee) === 7 ? "KM 100" : "KM 2")} - R$ {Number(data.deliveryFee).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm font-bold text-foreground pt-1">
                 <span>Total</span>

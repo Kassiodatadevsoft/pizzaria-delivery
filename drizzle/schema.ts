@@ -105,6 +105,7 @@ export type Order = {
   paymentMethod: PaymentMethod;
   changeFor: string | null;
   subtotal: string;
+  deliveryType: string | null;
   deliveryFee: string;
   total: string;
   status: OrderStatus;

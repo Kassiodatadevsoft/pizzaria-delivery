@@ -50,6 +50,11 @@ function escapeHtml(value: unknown) {
     .replace(/'/g, "&#039;");
 }
 
+function getDeliveryLabel(order: { deliveryType?: string | null; deliveryFee?: unknown }) {
+  const type = order.deliveryType || (Number(order.deliveryFee) === 7 ? "KM 100" : "KM 2");
+  return `${type} - ${formatCurrency(order.deliveryFee)}`;
+}
+
 function printDocument(title: string, body: string, width = "80mm") {
   const printWindow = window.open("", "_blank", "width=420,height=720");
   if (!printWindow) {
@@ -182,7 +187,7 @@ export default function AdminDelivery() {
         ${itemsHtml}
         <div class="line"></div>
         <div class="row"><span>Subtotal</span><span>${formatCurrency(orderDetail.subtotal)}</span></div>
-        <div class="row"><span>Entrega</span><span>${formatCurrency(orderDetail.deliveryFee)}</span></div>
+        <div class="row"><span>TAXA DE ENTREGA</span><span>${escapeHtml(getDeliveryLabel(orderDetail))}</span></div>
         <div class="row bold"><span>Total</span><span>${formatCurrency(orderDetail.total)}</span></div>
         <div class="line"></div>
         <p><span class="bold">Pagamento:</span> ${escapeHtml(PAYMENT_LABELS[orderDetail.paymentMethod] ?? orderDetail.paymentMethod)}</p>
@@ -423,8 +428,8 @@ export default function AdminDelivery() {
                   <span>R$ {Number(orderDetail.subtotal).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-muted-foreground">
-                  <span>Entrega</span>
-                  <span>R$ {Number(orderDetail.deliveryFee).toFixed(2)}</span>
+                  <span>Taxa de entrega</span>
+                  <span>{getDeliveryLabel(orderDetail)}</span>
                 </div>
                 <div className="flex justify-between text-base font-bold text-foreground">
                   <span>Total</span>

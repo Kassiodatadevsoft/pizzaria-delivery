@@ -63,6 +63,11 @@ const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
 const sizeEnum = z.string().min(1); // suporta: small, medium, large, brotinho, trem, bitrem, unico, copo, jarra
 const paymentEnum = z.enum(["cash", "card", "pix"]);
 const statusEnum = z.enum(["received", "preparing", "out_for_delivery", "delivered", "cancelled"]);
+const deliveryTypeEnum = z.enum(["KM 2", "KM 100"]);
+const DELIVERY_FEES: Record<z.infer<typeof deliveryTypeEnum>, number> = {
+  "KM 2": 5,
+  "KM 100": 7,
+};
 
 const orderItemSchema = z.object({
   pizzaId: z.number().int().positive(),
@@ -239,13 +244,13 @@ export const appRouter = router({
           changeFor: z.number().optional(),
           notes: z.string().optional(),
           items: z.array(orderItemSchema).min(1),
-          deliveryFee: z.number().optional().default(5),
+          deliveryType: deliveryTypeEnum,
         })
       )
       .mutation(async ({ input, ctx }) => {
         const token = nanoid(32);
         const subtotal = input.items.reduce((sum, item) => sum + item.totalPrice, 0);
-        const deliveryFee = input.deliveryFee ?? 5;
+        const deliveryFee = DELIVERY_FEES[input.deliveryType];
         const total = subtotal + deliveryFee;
 
         const orderData = {
@@ -263,6 +268,7 @@ export const appRouter = router({
           paymentMethod: input.paymentMethod,
           changeFor: input.changeFor ? String(input.changeFor) : null,
           subtotal: String(subtotal.toFixed(2)),
+          deliveryType: input.deliveryType,
           deliveryFee: String(deliveryFee.toFixed(2)),
           total: String(total.toFixed(2)),
           notes: input.notes ?? null,

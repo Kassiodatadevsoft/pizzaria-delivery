@@ -6,16 +6,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useLocation } from "wouter";
-import { ArrowLeft, CreditCard, Banknote, QrCode, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowLeft, CreditCard, Banknote, QrCode, CheckCircle2, Loader2, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 
 type PaymentMethod = "cash" | "card" | "pix";
+type DeliveryType = "KM 2" | "KM 100";
 
 const PAYMENT_OPTIONS: { value: PaymentMethod; label: string; icon: React.ReactNode; desc: string }[] = [
   { value: "pix", label: "PIX", icon: <QrCode className="w-5 h-5" />, desc: "Aprovação instantânea" },
   { value: "card", label: "Cartão", icon: <CreditCard className="w-5 h-5" />, desc: "Débito ou crédito" },
   { value: "cash", label: "Dinheiro", icon: <Banknote className="w-5 h-5" />, desc: "Troco na entrega" },
+];
+
+const DELIVERY_OPTIONS: { value: DeliveryType; label: string; price: number }[] = [
+  { value: "KM 2", label: "KM 2", price: 5 },
+  { value: "KM 100", label: "KM 100", price: 7 },
 ];
 
 
@@ -32,13 +38,15 @@ export default function Checkout() {
     addressNumber: "",
     addressComplement: "",
     addressNeighborhood: "",
+    deliveryType: "" as DeliveryType | "",
     paymentMethod: "pix" as PaymentMethod,
     changeFor: "",
     notes: "",
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const deliveryFee = 5;
+  const selectedDelivery = DELIVERY_OPTIONS.find((option) => option.value === form.deliveryType);
+  const deliveryFee = selectedDelivery?.price ?? 0;
   const total = subtotal + deliveryFee;
 
   const createOrder = trpc.orders.create.useMutation({
@@ -65,6 +73,7 @@ export default function Checkout() {
     if (!form.addressStreet.trim()) e.addressStreet = "Rua é obrigatória";
     if (!form.addressNumber.trim()) e.addressNumber = "Número é obrigatório";
     if (!form.addressNeighborhood.trim()) e.addressNeighborhood = "Bairro é obrigatório";
+    if (!form.deliveryType) e.deliveryType = "Selecione a Taxa de entrega";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -76,6 +85,7 @@ export default function Checkout() {
       return;
     }
     if (!validate()) return;
+    if (!form.deliveryType) return;
 
     createOrder.mutate({
       customerName: form.customerName,
@@ -89,7 +99,7 @@ export default function Checkout() {
       paymentMethod: form.paymentMethod,
       changeFor: form.changeFor ? parseFloat(form.changeFor) : undefined,
       notes: form.notes || undefined,
-      deliveryFee,
+      deliveryType: form.deliveryType,
       items: items.map((item) => ({
         pizzaId: item.pizzaId,
         pizzaName: item.pizzaName,
@@ -236,6 +246,36 @@ export default function Checkout() {
                 </div>
               </div>
 
+              {/* Delivery fee */}
+              <div className="bg-card rounded-2xl border border-border p-6">
+                <h2 className="font-serif text-xl font-semibold text-foreground mb-5">
+                  Taxa de entrega
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {DELIVERY_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => set("deliveryType", option.value)}
+                      className={`p-4 rounded-xl border text-left transition-all ${
+                        form.deliveryType === option.value
+                          ? "border-primary bg-primary/10"
+                          : "border-border hover:border-primary/40"
+                      }`}
+                    >
+                      <div className={`mb-2 ${form.deliveryType === option.value ? "text-primary" : "text-muted-foreground"}`}>
+                        <Truck className="w-5 h-5" />
+                      </div>
+                      <p className={`font-semibold text-sm ${form.deliveryType === option.value ? "text-foreground" : "text-muted-foreground"}`}>
+                        {option.label}
+                      </p>
+                      <p className="text-xs text-muted-foreground">R$ {option.price.toFixed(2)}</p>
+                    </button>
+                  ))}
+                </div>
+                {errors.deliveryType && <p className="text-destructive text-xs mt-2">{errors.deliveryType}</p>}
+              </div>
+
               {/* Payment */}
               <div className="bg-card rounded-2xl border border-border p-6">
                 <h2 className="font-serif text-xl font-semibold text-foreground mb-5">
@@ -334,7 +374,7 @@ export default function Checkout() {
                     <span>R$ {subtotal.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
-                    <span>Taxa de entrega</span>
+                    <span>Taxa de entrega{form.deliveryType ? `: ${form.deliveryType}` : ""}</span>
                     <span>R$ {deliveryFee.toFixed(2)}</span>
                   </div>
                   <Separator className="my-2" />

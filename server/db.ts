@@ -113,6 +113,7 @@ function mapOrder(row: any): Order {
     ...row,
     changeFor: row.changeFor == null ? null : decimalString(row.changeFor),
     subtotal: decimalString(row.subtotal),
+    deliveryType: row.deliveryType ?? null,
     deliveryFee: decimalString(row.deliveryFee),
     total: decimalString(row.total),
   };
@@ -322,11 +323,20 @@ function bindOrder(req: sql.Request, data: InsertOrder) {
   req.input("paymentMethod", sql.NVarChar(20), data.paymentMethod);
   req.input("changeFor", sql.Decimal(10, 2), data.changeFor == null ? null : Number(data.changeFor));
   req.input("subtotal", sql.Decimal(10, 2), Number(data.subtotal));
+  req.input("deliveryType", sql.NVarChar(20), data.deliveryType ?? null);
   req.input("deliveryFee", sql.Decimal(10, 2), Number(data.deliveryFee));
   req.input("total", sql.Decimal(10, 2), Number(data.total));
   req.input("status", sql.NVarChar(30), data.status);
   req.input("notes", sql.NVarChar(sql.MAX), data.notes ?? null);
   req.input("receivedAt", sql.DateTime2, data.receivedAt);
+}
+
+async function ensureOrderFreightColumns(tx?: sql.Transaction) {
+  const req = tx ? new sql.Request(tx) : await request();
+  await req.query(`
+    IF COL_LENGTH('delivery.orders', 'deliveryType') IS NULL
+      ALTER TABLE ${TABLES.orders} ADD deliveryType NVARCHAR(20) NULL;
+  `);
 }
 
 export async function createOrder(orderData: InsertOrder, items: InsertOrderItem[]) {
@@ -335,18 +345,19 @@ export async function createOrder(orderData: InsertOrder, items: InsertOrderItem
   const tx = new sql.Transaction(pool);
   await tx.begin();
   try {
+    await ensureOrderFreightColumns(tx);
     const orderReq = new sql.Request(tx);
     bindOrder(orderReq, orderData);
     const orderResult = await orderReq.query(`
       INSERT INTO ${TABLES.orders}
         (token, userId, customerName, customerPhone, addressStreet, addressNumber, addressComplement,
          addressNeighborhood, addressCity, addressState, addressZip, paymentMethod, changeFor, subtotal,
-         deliveryFee, total, status, notes, receivedAt)
+         deliveryType, deliveryFee, total, status, notes, receivedAt)
       OUTPUT INSERTED.*
       VALUES
         (@token, @userId, @customerName, @customerPhone, @addressStreet, @addressNumber, @addressComplement,
          @addressNeighborhood, @addressCity, @addressState, @addressZip, @paymentMethod, @changeFor, @subtotal,
-         @deliveryFee, @total, @status, @notes, @receivedAt)
+         @deliveryType, @deliveryFee, @total, @status, @notes, @receivedAt)
     `);
     const inserted = mapOrder(orderResult.recordset[0]);
 

@@ -8,6 +8,8 @@ export interface CartItem {
   // Meio a meio
   secondFlavorId?: number;
   secondFlavorName?: string;
+  extraFlavorIds?: number[];
+  extraFlavorNames?: string[];
   size: string;
   sizeLabel: string;
   // Borda recheada
@@ -36,7 +38,8 @@ const CartContext = createContext<CartContextValue | null>(null);
 
 function makeItemId(item: Omit<CartItem, "id" | "totalPrice">): string {
   const parts = [item.pizzaId, item.size];
-  if (item.secondFlavorId) parts.push(item.secondFlavorId);
+  if (item.extraFlavorIds?.length) parts.push(item.extraFlavorIds.join("."));
+  else if (item.secondFlavorId) parts.push(item.secondFlavorId);
   if (item.crust) parts.push(item.crust);
   return parts.join("-");
 }

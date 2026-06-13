@@ -107,12 +107,12 @@ export default function CartDrawer() {
               </div>
               <div className="flex items-center justify-between text-sm text-muted-foreground">
                 <span>Taxa de entrega</span>
-                <span>R$ 5,00</span>
+                <span>Selecionar no fechamento</span>
               </div>
               <Separator />
               <div className="flex items-center justify-between font-semibold text-foreground">
-                <span>Total</span>
-                <span className="text-primary text-lg">R$ {(subtotal + 5).toFixed(2)}</span>
+                <span>Total parcial</span>
+                <span className="text-primary text-lg">R$ {subtotal.toFixed(2)}</span>
               </div>
               <Button
                 onClick={handleCheckout}

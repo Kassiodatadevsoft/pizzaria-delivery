@@ -69,7 +69,7 @@ export default function PizzaOrderModal({ pizza, allPizzas, open, onClose }: Piz
   const [selectedSize, setSelectedSize] = useState<string>("");
   const [quantity, setQuantity] = useState(1);
   const [isHalfHalf, setIsHalfHalf] = useState(false);
-  const [secondFlavor, setSecondFlavor] = useState<PizzaItem | null>(null);
+  const [extraFlavors, setExtraFlavors] = useState<PizzaItem[]>([]);
   const [showSecondFlavors, setShowSecondFlavors] = useState(false);
   const [selectedCrust, setSelectedCrust] = useState<string>("");
 
@@ -83,16 +83,23 @@ export default function PizzaOrderModal({ pizza, allPizzas, open, onClose }: Piz
   const canHalfHalf = isPizzaCategory && sameCategoryPizzas.length > 0 && HALF_HALF_SIZES.includes(selectedSize);
   const hasCrust = isPizzaCategory && selectedSize && selectedSize !== "brotinho" && HALF_HALF_SIZES.includes(selectedSize);
   const crustPrice = selectedSize ? (CRUST_PRICES[selectedSize] ?? 0) : 0;
+  const maxExtraFlavors = selectedSize === "bitrem" ? 5 : selectedSize === "trem" ? 3 : 1;
+  const totalFlavorLimit = maxExtraFlavors + 1;
+  const selectedFlavorCount = 1 + extraFlavors.length;
+  const isMultiFlavor = isHalfHalf && extraFlavors.length > 0;
 
   const basePrice = useMemo(() => {
     if (!pizza || !selectedSize) return 0;
-    const p1 = pizza.prices[selectedSize] ?? 0;
-    if (isHalfHalf && secondFlavor) {
-      const p2 = secondFlavor.prices[selectedSize] ?? 0;
-      return (p1 + p2) / 2; // média dos dois sabores
+    if ((selectedSize === "trem" || selectedSize === "bitrem") && isHalfHalf) {
+      return pizza.prices[selectedSize] ?? 0;
     }
-    return p1;
-  }, [pizza, selectedSize, isHalfHalf, secondFlavor]);
+    const selectedFlavors = [pizza, ...extraFlavors];
+    if (isHalfHalf && extraFlavors.length > 0) {
+      const total = selectedFlavors.reduce((sum, flavor) => sum + (flavor.prices[selectedSize] ?? 0), 0);
+      return total / selectedFlavors.length;
+    }
+    return pizza.prices[selectedSize] ?? 0;
+  }, [pizza, selectedSize, isHalfHalf, extraFlavors]);
 
   const unitPrice = basePrice + (selectedCrust ? crustPrice : 0);
   const totalPrice = unitPrice * quantity;
@@ -101,10 +108,23 @@ export default function PizzaOrderModal({ pizza, allPizzas, open, onClose }: Piz
     setSelectedSize("");
     setQuantity(1);
     setIsHalfHalf(false);
-    setSecondFlavor(null);
+    setExtraFlavors([]);
     setShowSecondFlavors(false);
     setSelectedCrust("");
     onClose();
+  }
+
+  function toggleExtraFlavor(flavor: PizzaItem) {
+    setExtraFlavors((current) => {
+      if (current.some((item) => item.id === flavor.id)) {
+        return current.filter((item) => item.id !== flavor.id);
+      }
+      if (current.length >= maxExtraFlavors) {
+        toast.error(`Este tamanho permite no maximo ${totalFlavorLimit} sabores.`);
+        return current;
+      }
+      return [...current, flavor];
+    });
   }
 
   function handleAddToCart() {
@@ -112,24 +132,27 @@ export default function PizzaOrderModal({ pizza, allPizzas, open, onClose }: Piz
       toast.error("Selecione o tamanho da pizza.");
       return;
     }
-    if (isHalfHalf && !secondFlavor) {
-      toast.error("Selecione o segundo sabor para o meio a meio.");
+    if (isHalfHalf && extraFlavors.length === 0) {
+      toast.error(selectedSize === "trem" || selectedSize === "bitrem" ? "Selecione pelo menos mais um sabor." : "Selecione o segundo sabor para o meio a meio.");
       return;
     }
 
     const sizeConfig = SIZE_CONFIG[selectedSize];
     const crustOption = CRUST_OPTIONS.find((c) => c.key === selectedCrust);
+    const flavorNames = [pizza.name, ...extraFlavors.map((flavor) => flavor.name)];
 
-    const flavorName = isHalfHalf && secondFlavor
-      ? `${pizza.name} / ${secondFlavor.name}`
+    const flavorName = isMultiFlavor
+      ? flavorNames.join(" / ")
       : pizza.name;
 
     addItem({
       pizzaId: pizza.id,
       pizzaName: flavorName,
       imageUrl: pizza.imageUrl ?? undefined,
-      secondFlavorId: isHalfHalf && secondFlavor ? secondFlavor.id : undefined,
-      secondFlavorName: isHalfHalf && secondFlavor ? secondFlavor.name : undefined,
+      secondFlavorId: isMultiFlavor ? extraFlavors[0].id : undefined,
+      secondFlavorName: isMultiFlavor ? extraFlavors[0].name : undefined,
+      extraFlavorIds: isMultiFlavor ? extraFlavors.map((flavor) => flavor.id) : undefined,
+      extraFlavorNames: isMultiFlavor ? extraFlavors.map((flavor) => flavor.name) : undefined,
       size: selectedSize,
       sizeLabel: sizeConfig?.label ?? selectedSize,
       crust: selectedCrust || undefined,
@@ -183,7 +206,10 @@ export default function PizzaOrderModal({ pizza, allPizzas, open, onClose }: Piz
                       // Reset meio a meio se tamanho não suportar
                       if (!HALF_HALF_SIZES.includes(size)) {
                         setIsHalfHalf(false);
-                        setSecondFlavor(null);
+                        setExtraFlavors([]);
+                      }
+                      if (size !== "trem" && size !== "bitrem") {
+                        setExtraFlavors((current) => current.slice(0, 1));
                       }
                       // Reset borda se brotinho
                       if (size === "brotinho") setSelectedCrust("");
@@ -226,13 +252,17 @@ export default function PizzaOrderModal({ pizza, allPizzas, open, onClose }: Piz
               <Separator className="bg-border mb-4" />
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <h3 className="text-sm font-semibold text-foreground">Meio a Meio?</h3>
-                  <p className="text-xs text-muted-foreground">Escolha 2 sabores diferentes</p>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {selectedSize === "trem" || selectedSize === "bitrem" ? "Selecionar sabores?" : "Meio a Meio?"}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedSize === "bitrem" ? "Escolha ate 6 sabores diferentes" : selectedSize === "trem" ? "Escolha ate 4 sabores diferentes" : "Escolha 2 sabores diferentes"}
+                  </p>
                 </div>
                 <button
                   onClick={() => {
                     setIsHalfHalf(!isHalfHalf);
-                    if (isHalfHalf) { setSecondFlavor(null); setShowSecondFlavors(false); }
+                    if (isHalfHalf) { setExtraFlavors([]); setShowSecondFlavors(false); }
                   }}
                   className={`relative w-11 h-6 rounded-full transition-colors ${isHalfHalf ? "bg-primary" : "bg-muted"}`}
                 >
@@ -251,21 +281,29 @@ export default function PizzaOrderModal({ pizza, allPizzas, open, onClose }: Piz
                     <Badge className="bg-primary/20 text-primary border-0 text-xs">Selecionado</Badge>
                   </div>
 
-                  {/* Segundo sabor */}
+                  {/* Sabores adicionais */}
                   <button
                     onClick={() => setShowSecondFlavors(!showSecondFlavors)}
                     className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${
-                      secondFlavor
+                      extraFlavors.length > 0
                         ? "border-primary/40 bg-primary/5"
                         : "border-dashed border-border hover:border-primary/50"
                     }`}
                   >
                     <Pizza className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                     <div className="flex-1 text-left">
-                      {secondFlavor ? (
-                        <p className="text-sm font-medium text-foreground">2º sabor: {secondFlavor.name}</p>
+                      {extraFlavors.length > 0 ? (
+                        <div className="space-y-0.5">
+                          {extraFlavors.map((flavor, index) => (
+                            <p key={flavor.id} className="text-sm font-medium text-foreground">
+                              {index + 2}º sabor: {flavor.name}
+                            </p>
+                          ))}
+                        </div>
                       ) : (
-                        <p className="text-sm text-muted-foreground">Escolher 2º sabor...</p>
+                        <p className="text-sm text-muted-foreground">
+                          {selectedSize === "trem" || selectedSize === "bitrem" ? "Escolher sabores adicionais..." : "Escolher 2º sabor..."}
+                        </p>
                       )}
                     </div>
                     {showSecondFlavors ? (
@@ -280,21 +318,26 @@ export default function PizzaOrderModal({ pizza, allPizzas, open, onClose }: Piz
                       {sameCategoryPizzas.map((p) => (
                         <button
                           key={p.id}
-                          onClick={() => { setSecondFlavor(p); setShowSecondFlavors(false); }}
+                          onClick={() => {
+                            toggleExtraFlavor(p);
+                            if (selectedSize !== "trem" && selectedSize !== "bitrem") setShowSecondFlavors(false);
+                          }}
                           className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-primary/5 transition-colors ${
-                            secondFlavor?.id === p.id ? "bg-primary/10" : ""
+                            extraFlavors.some((flavor) => flavor.id === p.id) ? "bg-primary/10" : ""
                           }`}
                         >
                           <span className="flex-1 text-sm text-foreground">{p.name}</span>
-                          {secondFlavor?.id === p.id && <Check className="w-4 h-4 text-primary" />}
+                          {extraFlavors.some((flavor) => flavor.id === p.id) && <Check className="w-4 h-4 text-primary" />}
                         </button>
                       ))}
                     </div>
                   )}
 
-                  {isHalfHalf && secondFlavor && (
+                  {isHalfHalf && extraFlavors.length > 0 && (
                     <p className="text-xs text-muted-foreground text-center">
-                      Preço = média dos dois sabores no tamanho escolhido
+                      {selectedSize === "trem" || selectedSize === "bitrem"
+                        ? "Preço permanece o valor do tamanho escolhido"
+                        : `Preço = média dos ${selectedFlavorCount} sabores no tamanho escolhido`}
                     </p>
                   )}
                 </div>

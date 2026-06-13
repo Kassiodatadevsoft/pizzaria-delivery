@@ -51,15 +51,13 @@ export default function Navbar() {
           >
             Cardápio
           </button>
-          {isAuthenticated && user?.role === "admin" && (
-            <button
-              onClick={() => navigate("/admin")}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-            >
-              <LayoutDashboard className="w-3.5 h-3.5" />
-              Admin
-            </button>
-          )}
+          <button
+            onClick={() => navigate("/admin")}
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+          >
+            <LayoutDashboard className="w-3.5 h-3.5" />
+            Admin
+          </button>
         </nav>
 
         {/* Actions */}
@@ -160,14 +158,12 @@ export default function Navbar() {
               Entrar / Cadastrar
             </Button>
           )}
-          {isAuthenticated && user?.role === "admin" && (
-            <button
-              onClick={() => { navigate("/admin"); setMobileOpen(false); }}
-              className="block w-full text-left text-sm text-muted-foreground hover:text-foreground py-2"
-            >
-              Painel Admin
-            </button>
-          )}
+          <button
+            onClick={() => { navigate("/admin"); setMobileOpen(false); }}
+            className="block w-full text-left text-sm text-muted-foreground hover:text-foreground py-2"
+          >
+            Painel Admin
+          </button>
         </div>
       )}
     </header>
