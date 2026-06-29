@@ -1204,7 +1204,7 @@ export default function AdminMenu() {
                               step="0.01"
                               value={choice.priceDelta}
                               onChange={(e) => updateOptionChoice(group.id, choice.id, { priceDelta: e.target.value })}
-                              placeholder="+ R$"
+                              placeholder="Preco"
                               className="bg-input border-border h-8 text-sm"
                             />
                             <Button

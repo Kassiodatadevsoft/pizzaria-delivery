@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -84,6 +84,13 @@ export default function PizzaOrderModal({ pizza, allPizzas, open, onClose }: Piz
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({});
   const [selectedAddonIds, setSelectedAddonIds] = useState<number[]>([]);
 
+  useEffect(() => {
+    if (!open || !pizza || selectedSize) return;
+    if (pizza.availableSizes.length === 1) {
+      setSelectedSize(pizza.availableSizes[0]);
+    }
+  }, [open, pizza, selectedSize]);
+
   const flavorConfig = pizza?.flavorConfig;
   const flavorOptions = useMemo(() => {
     if (!pizza) return [];
@@ -144,6 +151,24 @@ export default function PizzaOrderModal({ pizza, allPizzas, open, onClose }: Piz
       .filter((group) => group.choices.length > 0);
   }, [pizza, productOptions, allPizzas, selectedSize]);
 
+  useEffect(() => {
+    setSelectedOptions((current) => {
+      const validGroupIds = new Set(optionGroups.map((group) => group.id));
+      let changed = false;
+      const next: Record<string, string[]> = {};
+
+      for (const group of optionGroups) {
+        const validChoiceIds = new Set(group.choices.map((choice) => choice.id));
+        const validSelected = (current[group.id] ?? []).filter((choiceId) => validChoiceIds.has(choiceId));
+        if (validSelected.length > 0) next[group.id] = validSelected;
+        if (validSelected.length !== (current[group.id] ?? []).length) changed = true;
+      }
+
+      if (Object.keys(current).some((groupId) => !validGroupIds.has(groupId))) changed = true;
+      return changed ? next : current;
+    });
+  }, [optionGroups]);
+
   const selectedOptionDetails = optionGroups.flatMap((group) => {
     const selectedChoiceIds = selectedOptions[group.id] ?? [];
     return group.choices.filter((item) => selectedChoiceIds.includes(item.id)).map((choice) => ({
@@ -154,7 +179,6 @@ export default function PizzaOrderModal({ pizza, allPizzas, open, onClose }: Piz
       priceDelta: choice.priceDelta ?? 0,
     }));
   });
-  const optionsPrice = selectedOptionDetails.reduce((sum, option) => sum + (option.priceDelta ?? 0), 0);
   const addonOptions = (pizza?.addons ?? []).filter((addon) => addon.active);
   const selectedAddonDetails = addonOptions
     .filter((addon) => selectedAddonIds.includes(addon.id))
@@ -178,7 +202,18 @@ export default function PizzaOrderModal({ pizza, allPizzas, open, onClose }: Piz
     return pizza.prices[selectedSize] ?? 0;
   }, [pizza, selectedSize, isHalfHalf, extraFlavors, flavorConfig?.priceMode]);
 
-  const unitPrice = basePrice + optionsPrice + addonsPrice + (selectedCrust ? crustPrice : 0);
+  const principalOptionGroups = optionGroups.filter((group) =>
+    group.choices.some((choice) => (choice.priceDelta ?? 0) > 0)
+  );
+  const selectedPrincipalOptions = selectedOptionDetails.filter((option) =>
+    principalOptionGroups.some((group) => group.id === option.groupId) && (option.priceDelta ?? 0) > 0
+  );
+  const selectedPricedOption = selectedPrincipalOptions[0];
+  const productPrice = selectedPricedOption?.priceDelta ?? basePrice;
+  const extraOptionsPrice = selectedOptionDetails
+    .filter((option) => !principalOptionGroups.some((group) => group.id === option.groupId))
+    .reduce((sum, option) => sum + (option.priceDelta ?? 0), 0);
+  const unitPrice = productPrice + extraOptionsPrice + addonsPrice + (selectedCrust ? crustPrice : 0);
   const totalPrice = unitPrice * quantity;
 
   function handleClose() {
@@ -268,14 +303,7 @@ export default function PizzaOrderModal({ pizza, allPizzas, open, onClose }: Piz
   function toggleProductOption(group: ProductOptionGroup, choiceId: string) {
     setSelectedOptions((current) => {
       const selected = current[group.id] ?? [];
-      if (group.selectionMode === "multiple") {
-        return {
-          ...current,
-          [group.id]: selected.includes(choiceId)
-            ? selected.filter((id) => id !== choiceId)
-            : [...selected, choiceId],
-        };
-      }
+      if (selected.includes(choiceId)) return { ...current, [group.id]: [] };
       return { ...current, [group.id]: [choiceId] };
     });
   }
@@ -443,13 +471,11 @@ export default function PizzaOrderModal({ pizza, allPizzas, open, onClose }: Piz
                       {group.name}
                       {group.required && <span className="text-primary"> *</span>}
                     </h3>
-                    {group.selectionMode === "multiple" && (
-                      <p className="text-xs text-muted-foreground mb-2">Selecione quantos adicionais quiser.</p>
-                    )}
+                    <p className="text-xs text-muted-foreground mb-2">Selecione uma opcao.</p>
                     <div className="grid grid-cols-1 gap-2">
                       {group.choices.map((choice) => {
                         const selected = (selectedOptions[group.id] ?? []).includes(choice.id);
-                        const delta = choice.priceDelta ?? 0;
+                        const optionPrice = choice.priceDelta ?? 0;
                         return (
                           <button
                             key={choice.id}
@@ -463,9 +489,9 @@ export default function PizzaOrderModal({ pizza, allPizzas, open, onClose }: Piz
                                 {choice.name}
                               </span>
                               <div className="flex items-center gap-2">
-                                {delta !== 0 && (
+                                {optionPrice > 0 && (
                                   <span className="text-xs text-muted-foreground">
-                                    {delta > 0 ? "+" : "-"} R$ {Math.abs(delta).toFixed(2)}
+                                    R$ {optionPrice.toFixed(2)}
                                   </span>
                                 )}
                                 {selected && <Check className="w-4 h-4 text-primary" />}
@@ -581,8 +607,8 @@ export default function PizzaOrderModal({ pizza, allPizzas, open, onClose }: Piz
           {selectedSize && (
             <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 space-y-1.5">
               <div className="flex justify-between text-sm text-muted-foreground">
-                <span>Item ({SIZE_CONFIG[selectedSize]?.label ?? selectedSize})</span>
-                <span>R$ {basePrice.toFixed(2)}</span>
+                <span>{selectedPricedOption ? "Preco principal" : `Item (${SIZE_CONFIG[selectedSize]?.label ?? selectedSize})`}</span>
+                <span>R$ {productPrice.toFixed(2)}</span>
               </div>
               {selectedCrust && (
                 <div className="flex justify-between text-sm text-muted-foreground">
@@ -594,9 +620,9 @@ export default function PizzaOrderModal({ pizza, allPizzas, open, onClose }: Piz
                 <div key={option.groupId} className="flex justify-between text-sm text-muted-foreground">
                   <span>{option.groupName}: {option.choiceName}</span>
                   <span>
-                    {option.priceDelta
-                      ? `${option.priceDelta > 0 ? "+" : "-"} R$ ${Math.abs(option.priceDelta).toFixed(2)}`
-                      : "R$ 0.00"}
+                    {(option.priceDelta ?? 0) > 0 && option.choiceId !== selectedPricedOption?.choiceId
+                      ? `R$ ${(option.priceDelta ?? 0).toFixed(2)}`
+                      : "preco principal"}
                   </span>
                 </div>
               ))}
