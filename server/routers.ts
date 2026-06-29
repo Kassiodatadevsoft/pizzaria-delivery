@@ -176,6 +176,7 @@ export const appRouter = router({
         slug: z.string().min(1),
         description: z.string().optional(),
         sortOrder: z.number().int().optional().default(0),
+        active: z.boolean().optional().default(true),
       }))
       .mutation(({ input }) => createCategory(input)),
 

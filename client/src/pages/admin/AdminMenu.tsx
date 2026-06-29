@@ -52,6 +52,13 @@ type ProductOptionGroup = {
   sourceCategoryIds: string[];
   choices: ProductOptionChoice[];
 };
+type CategoryFormState = {
+  name: string;
+  slug: string;
+  description: string;
+  sortOrder: string;
+  active: boolean;
+};
 
 interface FormState {
   name: string;
@@ -106,6 +113,23 @@ const emptyForm = (): FormState => ({
   addonIds: [],
   productOptions: [],
 });
+const emptyCategoryForm = (): CategoryFormState => ({
+  name: "",
+  slug: "",
+  description: "",
+  sortOrder: "0",
+  active: true,
+});
+
+function slugifyCategoryName(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
 function buildPricesPayload(form: FormState): { prices: Record<string, number>; availableSizes: string[] } {
   if (form.priceMode === "unico") {
@@ -288,6 +312,9 @@ export default function AdminMenu() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
+  const [categoryForm, setCategoryForm] = useState<CategoryFormState>(emptyCategoryForm());
   const [filterCat, setFilterCat] = useState<string>("all");
 
   const createItem = trpc.pizzas.create.useMutation({
@@ -310,12 +337,22 @@ export default function AdminMenu() {
     onError: (e) => toast.error("Erro ao atualizar item", { description: e.message }),
   });
 
+  const createCategory = trpc.categories.create.useMutation({
+    onSuccess: () => {
+      toast.success("Categoria criada com sucesso!");
+      utils.categories.list.invalidate();
+      setCategoryDialogOpen(false);
+    },
+    onError: (e) => toast.error("Erro ao criar categoria", { description: e.message }),
+  });
+
   const updateCategory = trpc.categories.update.useMutation({
     onSuccess: () => {
       toast.success("Categoria atualizada!");
       utils.categories.list.invalidate();
       utils.pizzas.list.invalidate();
       utils.pizzas.featured.invalidate();
+      setCategoryDialogOpen(false);
     },
     onError: (e) => toast.error("Erro ao atualizar categoria", { description: e.message }),
   });
@@ -339,6 +376,65 @@ export default function AdminMenu() {
     setEditingId(item.id);
     setForm(formFromItem(item));
     setDialogOpen(true);
+  }
+
+  function openCreateCategory() {
+    setEditingCategoryId(null);
+    setCategoryForm(emptyCategoryForm());
+    setCategoryDialogOpen(true);
+  }
+
+  function openEditCategory(category: NonNullable<typeof categories>[number]) {
+    setEditingCategoryId(category.id);
+    setCategoryForm({
+      name: category.name,
+      slug: category.slug,
+      description: category.description ?? "",
+      sortOrder: String(category.sortOrder ?? 0),
+      active: category.active,
+    });
+    setCategoryDialogOpen(true);
+  }
+
+  function setCategoryField<K extends keyof CategoryFormState>(key: K, value: CategoryFormState[K]) {
+    setCategoryForm((current) => {
+      if (key === "name") {
+        const nextName = String(value);
+        const currentAutoSlug = slugifyCategoryName(current.name);
+        const shouldSyncSlug = !current.slug.trim() || current.slug === currentAutoSlug;
+        return {
+          ...current,
+          name: nextName,
+          slug: shouldSyncSlug ? slugifyCategoryName(nextName) : current.slug,
+        };
+      }
+      if (key === "slug") {
+        return { ...current, slug: slugifyCategoryName(String(value)) };
+      }
+      return { ...current, [key]: value };
+    });
+  }
+
+  function handleCategorySubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const name = categoryForm.name.trim();
+    const slug = slugifyCategoryName(categoryForm.slug || categoryForm.name);
+    if (!name) { toast.error("Nome da categoria e obrigatorio"); return; }
+    if (!slug) { toast.error("Slug da categoria e obrigatorio"); return; }
+
+    const payload = {
+      name,
+      slug,
+      description: categoryForm.description.trim() || undefined,
+      sortOrder: parseInt(categoryForm.sortOrder) || 0,
+      active: categoryForm.active,
+    };
+
+    if (editingCategoryId) {
+      updateCategory.mutate({ id: editingCategoryId, ...payload });
+    } else {
+      createCategory.mutate(payload);
+    }
   }
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -523,6 +619,7 @@ export default function AdminMenu() {
     : pizzas?.filter((p) => String(p.categoryId) === filterCat);
 
   const isPending = createItem.isPending || updateItem.isPending;
+  const isCategoryPending = createCategory.isPending || updateCategory.isPending;
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -543,8 +640,12 @@ export default function AdminMenu() {
         <div className="flex items-center justify-between gap-4 mb-3">
           <div>
             <h2 className="font-serif text-lg font-semibold text-foreground">Categorias</h2>
-            <p className="text-xs text-muted-foreground">Ative ou desative categorias exibidas no cardapio publico.</p>
+            <p className="text-xs text-muted-foreground">Cadastre, edite, ative ou desative categorias exibidas no cardapio publico.</p>
           </div>
+          <Button type="button" variant="outline" size="sm" onClick={openCreateCategory} className="border-border gap-2">
+            <Plus className="w-3.5 h-3.5" />
+            Nova categoria
+          </Button>
         </div>
         <div className="flex flex-wrap gap-2">
           {categories?.map((cat) => (
@@ -558,6 +659,16 @@ export default function AdminMenu() {
               <Badge variant={cat.active ? "default" : "secondary"} className="text-[10px]">
                 {cat.active ? "Ativa" : "Inativa"}
               </Badge>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => openEditCategory(cat)}
+                className="h-7 w-7"
+                aria-label={`Editar categoria ${cat.name}`}
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </Button>
               <Switch
                 checked={cat.active}
                 disabled={updateCategory.isPending}
@@ -664,6 +775,93 @@ export default function AdminMenu() {
           })}
         </div>
       )}
+
+      {/* Category Dialog */}
+      <Dialog open={categoryDialogOpen} onOpenChange={(o) => !o && setCategoryDialogOpen(false)}>
+        <DialogContent className="bg-card border-border max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl text-foreground">
+              {editingCategoryId ? "Editar Categoria" : "Nova Categoria"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleCategorySubmit} className="space-y-4 pt-2">
+            <div>
+              <Label className="text-sm font-medium text-foreground mb-1.5 block">Nome *</Label>
+              <Input
+                value={categoryForm.name}
+                onChange={(e) => setCategoryField("name", e.target.value)}
+                placeholder="Ex: Pizzas Tradicionais"
+                className="bg-input border-border"
+              />
+            </div>
+
+            <div>
+              <Label className="text-sm font-medium text-foreground mb-1.5 block">Slug *</Label>
+              <Input
+                value={categoryForm.slug}
+                onChange={(e) => setCategoryField("slug", e.target.value)}
+                placeholder="Ex: pizzas-tradicionais"
+                className="bg-input border-border"
+              />
+            </div>
+
+            <div>
+              <Label className="text-sm font-medium text-foreground mb-1.5 block">Descricao</Label>
+              <Input
+                value={categoryForm.description}
+                onChange={(e) => setCategoryField("description", e.target.value)}
+                placeholder="Texto opcional"
+                className="bg-input border-border"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+              <div>
+                <Label className="text-sm font-medium text-foreground mb-1.5 block">Ordem</Label>
+                <Input
+                  type="number"
+                  value={categoryForm.sortOrder}
+                  onChange={(e) => setCategoryField("sortOrder", e.target.value)}
+                  className="bg-input border-border"
+                />
+              </div>
+              <div className="flex items-center gap-3 pb-2">
+                <Switch
+                  checked={categoryForm.active}
+                  onCheckedChange={(checked) => setCategoryField("active", checked)}
+                  id="category-active"
+                />
+                <Label htmlFor="category-active" className="text-sm text-foreground cursor-pointer">
+                  Ativa no cardapio
+                </Label>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCategoryDialogOpen(false)}
+                className="flex-1 border-border"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={isCategoryPending}
+                className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                {isCategoryPending ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Salvando...</>
+                ) : (
+                  editingCategoryId ? "Salvar Categoria" : "Criar Categoria"
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={(o) => !o && setDialogOpen(false)}>
