@@ -20,6 +20,11 @@ const PIZZA_SIZES = [
   { key: "trem",     label: "Trem (18 fatias)" },
   { key: "bitrem",   label: "Bi-Trem (36 fatias)" },
 ];
+const PRODUCT_SIZES = [
+  ...PIZZA_SIZES,
+  { key: "copo", label: "Copo" },
+  { key: "jarra", label: "Jarra" },
+];
 
 type SizePrice = { size: string; price: string };
 type FlavorPriceMode = "average" | "base";
@@ -90,7 +95,7 @@ const emptyForm = (): FormState => ({
   sortOrder: "0",
   priceMode: "unico",
   priceUnico: "",
-  sizePrices: PIZZA_SIZES.map((s) => ({ size: s.key, price: "" })),
+  sizePrices: PRODUCT_SIZES.map((s) => ({ size: s.key, price: "" })),
   flavorEnabled: false,
   flavorMax: "1",
   flavorMaxBySize: Object.fromEntries(PIZZA_SIZES.map((s) => [s.key, ""])),
@@ -255,7 +260,7 @@ function formFromItem(item: {
     sortOrder: String(item.sortOrder),
     priceMode: isUnico ? "unico" : "sizes",
     priceUnico: isUnico ? String(prices["unico"] ?? "") : "",
-    sizePrices: PIZZA_SIZES.map((s) => ({
+    sizePrices: PRODUCT_SIZES.map((s) => ({
       size: s.key,
       price: prices[s.key] !== undefined ? String(prices[s.key]) : "",
     })),
@@ -388,7 +393,7 @@ export default function AdminMenu() {
         ...f.productOptions,
         {
           id: makeOptionId("group"),
-          name: "",
+          name: "Opcao",
           required: true,
           selectionMode: "single",
           sourceCategoryIds: [],
@@ -475,6 +480,20 @@ export default function AdminMenu() {
     const { prices, availableSizes } = buildPricesPayload(form);
     if (availableSizes.length === 0) { toast.error("Informe pelo menos um preço"); return; }
 
+    const productOptions = buildProductOptionsPayload(form.productOptions);
+    const invalidOptionGroup = form.productOptions.find((group) => {
+      if (!group.name.trim()) return false;
+      const hasManualChoice = group.choices.some((choice) => choice.name.trim());
+      const hasCategoryChoice = group.sourceCategoryIds.length > 0;
+      return !hasManualChoice && !hasCategoryChoice;
+    });
+    if (invalidOptionGroup) {
+      toast.error("Opcao do produto incompleta", {
+        description: `Em "${invalidOptionGroup.name}", cadastre pelo menos uma escolha ou selecione uma categoria.`,
+      });
+      return;
+    }
+
     const payload = {
       name: form.name.trim(),
       description: form.description.trim() || undefined,
@@ -488,7 +507,7 @@ export default function AdminMenu() {
       availableSizes,
       flavorConfig: buildFlavorConfigPayload(form),
       crustConfig: buildCrustConfigPayload(form),
-      productOptions: buildProductOptionsPayload(form.productOptions),
+      productOptions,
       addonIds: form.addonIds.map((id) => parseInt(id)).filter((id) => id > 0),
     };
 
@@ -765,7 +784,7 @@ export default function AdminMenu() {
                   Preços por tamanho <span className="text-muted-foreground font-normal">(deixe vazio para não oferecer)</span>
                 </Label>
                 <div className="grid grid-cols-2 gap-3">
-                  {PIZZA_SIZES.map((s) => {
+                  {PRODUCT_SIZES.map((s) => {
                     const sp = form.sizePrices.find((x) => x.size === s.key);
                     return (
                       <div key={s.key} className="flex items-center gap-2">
@@ -907,11 +926,11 @@ export default function AdminMenu() {
                     <div key={group.id} className="rounded-xl border border-border p-4 space-y-3">
                       <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-3 items-end">
                         <div>
-                          <Label className="text-xs text-muted-foreground mb-1.5 block">Nome da opcao</Label>
+                          <Label className="text-xs text-muted-foreground mb-1.5 block">Nome da opcao que aparece para o cliente</Label>
                           <Input
                             value={group.name}
                             onChange={(e) => updateOptionGroup(group.id, { name: e.target.value })}
-                            placeholder="Ex: Arroz"
+                            placeholder="Ex: Arroz, Molho, Peixe ou Tamanho"
                             className="bg-input border-border"
                           />
                         </div>
@@ -932,7 +951,7 @@ export default function AdminMenu() {
                             id={`multiple-${group.id}`}
                           />
                           <Label htmlFor={`multiple-${group.id}`} className="text-xs text-foreground cursor-pointer">
-                            Varios adicionais
+                            Permitir varias escolhas
                           </Label>
                         </div>
                         <Button
@@ -947,7 +966,7 @@ export default function AdminMenu() {
                       </div>
 
                       <div>
-                        <Label className="text-xs text-muted-foreground mb-2 block">Categorias de adicionais</Label>
+                        <Label className="text-xs text-muted-foreground mb-2 block">Categorias de produtos (opcional)</Label>
                         <div className="flex flex-wrap gap-2">
                           {categories?.map((cat) => {
                             const selected = group.sourceCategoryIds.includes(String(cat.id));
@@ -968,17 +987,18 @@ export default function AdminMenu() {
                           })}
                         </div>
                         <p className="text-xs text-muted-foreground mt-2">
-                          Produtos dessas categorias aparecem como adicionais com o preco cadastrado.
+                          Opcional: use somente quando as escolhas vierem de produtos ja cadastrados. Para opcoes simples, preencha as escolhas abaixo.
                         </p>
                       </div>
 
                       <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground block">Escolhas dessa opcao</Label>
                         {group.choices.map((choice) => (
                           <div key={choice.id} className="grid grid-cols-[1fr_100px_auto] gap-2 items-center">
                             <Input
                               value={choice.name}
                               onChange={(e) => updateOptionChoice(group.id, choice.id, { name: e.target.value })}
-                              placeholder="Ex: Com arroz"
+                              placeholder="Ex: Tilapia, Salmao, Copo ou Jarra"
                               className="bg-input border-border h-8 text-sm"
                             />
                             <Input
