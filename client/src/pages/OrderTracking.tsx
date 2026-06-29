@@ -160,6 +160,15 @@ export default function OrderTracking() {
                         <span className="text-amber-500/80 text-xs">Borda {item.crustLabel}</span>
                       )}
                     </div>
+                    {item.addons && item.addons.length > 0 && (
+                      <div className="mt-1 space-y-0.5">
+                        {item.addons.map((addon) => (
+                          <p key={addon.id} className="text-muted-foreground text-xs">
+                            + {addon.addonName} - R$ {Number(addon.addonPrice).toFixed(2)}
+                          </p>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <span className="text-foreground font-medium flex-shrink-0">
                     R$ {Number(item.totalPrice).toFixed(2)}

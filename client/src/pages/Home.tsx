@@ -1,12 +1,13 @@
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
-import { ArrowRight, Star, Clock, Truck, Shield } from "lucide-react";
+import { ArrowRight, Star, Clock, Shield } from "lucide-react";
 import PizzaCard from "@/components/PizzaCard";
 
 export default function Home() {
   const [, navigate] = useLocation();
   const { data: featured, isLoading } = trpc.pizzas.featured.useQuery();
+  const { data: allPizzas } = trpc.pizzas.list.useQuery({ onlyActive: true });
 
   return (
     <div className="min-h-screen">
@@ -66,7 +67,6 @@ export default function Home() {
             {[
               { icon: Star, label: "4.9 estrelas", sub: "Avaliação média" },
               { icon: Clock, label: "30–45 min", sub: "Tempo de entrega" },
-              { icon: Truck, label: "Entrega grátis", sub: "Acima de R$ 80" },
               { icon: Shield, label: "100% seguro", sub: "Pagamento protegido" },
             ].map(({ icon: Icon, label, sub }) => (
               <div key={label} className="flex flex-col items-center gap-1">
@@ -103,7 +103,7 @@ export default function Home() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {featured?.map((pizza) => (
-                <PizzaCard key={pizza.id} pizza={pizza} allPizzas={featured ?? []} />
+                <PizzaCard key={pizza.id} pizza={pizza} allPizzas={allPizzas ?? featured ?? []} />
               ))}
             </div>
           )}

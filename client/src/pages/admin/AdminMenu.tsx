@@ -22,6 +22,31 @@ const PIZZA_SIZES = [
 ];
 
 type SizePrice = { size: string; price: string };
+type FlavorPriceMode = "average" | "base";
+type FlavorConfig = {
+  enabled: boolean;
+  maxFlavors: number;
+  maxFlavorsBySize: Record<string, number>;
+  allowedCategoryIds: number[];
+  priceMode: FlavorPriceMode;
+};
+type CrustConfig = {
+  enabled: boolean;
+  allowedCategoryIds: number[];
+};
+type ProductOptionChoice = {
+  id: string;
+  name: string;
+  priceDelta: string;
+};
+type ProductOptionGroup = {
+  id: string;
+  name: string;
+  required: boolean;
+  selectionMode: "single" | "multiple";
+  sourceCategoryIds: string[];
+  choices: ProductOptionChoice[];
+};
 
 interface FormState {
   name: string;
@@ -35,7 +60,24 @@ interface FormState {
   priceMode: "unico" | "sizes";
   priceUnico: string;
   sizePrices: SizePrice[];
+  flavorEnabled: boolean;
+  flavorMax: string;
+  flavorMaxBySize: Record<string, string>;
+  flavorAllowedCategoryIds: string[];
+  flavorPriceMode: FlavorPriceMode;
+  crustEnabled: boolean;
+  crustAllowedCategoryIds: string[];
+  addonIds: string[];
+  productOptions: ProductOptionGroup[];
 }
+
+const DEFAULT_FLAVOR_CONFIG: FlavorConfig = {
+  enabled: false,
+  maxFlavors: 1,
+  maxFlavorsBySize: {},
+  allowedCategoryIds: [],
+  priceMode: "average",
+};
 
 const emptyForm = (): FormState => ({
   name: "",
@@ -49,6 +91,15 @@ const emptyForm = (): FormState => ({
   priceMode: "unico",
   priceUnico: "",
   sizePrices: PIZZA_SIZES.map((s) => ({ size: s.key, price: "" })),
+  flavorEnabled: false,
+  flavorMax: "1",
+  flavorMaxBySize: Object.fromEntries(PIZZA_SIZES.map((s) => [s.key, ""])),
+  flavorAllowedCategoryIds: [],
+  flavorPriceMode: "average",
+  crustEnabled: false,
+  crustAllowedCategoryIds: [],
+  addonIds: [],
+  productOptions: [],
 });
 
 function buildPricesPayload(form: FormState): { prices: Record<string, number>; availableSizes: string[] } {
@@ -66,6 +117,112 @@ function buildPricesPayload(form: FormState): { prices: Record<string, number>; 
   return { prices, availableSizes: sizes };
 }
 
+function buildFlavorConfigPayload(form: FormState): FlavorConfig {
+  const maxFlavors = Math.max(1, parseInt(form.flavorMax) || 1);
+  const maxFlavorsBySize = Object.fromEntries(
+    Object.entries(form.flavorMaxBySize)
+      .map(([size, value]) => [size, Math.max(1, parseInt(value) || 0)] as const)
+      .filter(([, value]) => value > 0)
+  );
+  return {
+    enabled: form.flavorEnabled,
+    maxFlavors,
+    maxFlavorsBySize,
+    allowedCategoryIds: form.flavorAllowedCategoryIds.map((id) => parseInt(id)).filter((id) => id > 0),
+    priceMode: form.flavorPriceMode,
+  };
+}
+
+function normalizeFlavorConfig(value: unknown): FlavorConfig {
+  const config = (value && typeof value === "object" ? value : {}) as Partial<FlavorConfig>;
+  return {
+    enabled: Boolean(config.enabled),
+    maxFlavors: Math.max(1, Number(config.maxFlavors) || 1),
+    maxFlavorsBySize: config.maxFlavorsBySize ?? {},
+    allowedCategoryIds: Array.isArray(config.allowedCategoryIds) ? config.allowedCategoryIds : [],
+    priceMode: config.priceMode === "base" ? "base" : "average",
+  };
+}
+
+function normalizeCrustConfig(value: unknown): CrustConfig {
+  const config = (value && typeof value === "object" ? value : {}) as Partial<CrustConfig>;
+  return {
+    enabled: Boolean(config.enabled),
+    allowedCategoryIds: Array.isArray(config.allowedCategoryIds) ? config.allowedCategoryIds : [],
+  };
+}
+
+function makeOptionId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalizeProductOptions(value: unknown): ProductOptionGroup[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((group, groupIndex) => {
+    const normalizedGroup = (group && typeof group === "object" ? group : {}) as {
+      id?: unknown;
+      name?: unknown;
+      required?: unknown;
+      selectionMode?: unknown;
+      sourceCategoryIds?: unknown;
+      choices?: unknown;
+    };
+    const choices = Array.isArray(normalizedGroup.choices) ? normalizedGroup.choices : [];
+    return {
+      id: typeof normalizedGroup.id === "string" ? normalizedGroup.id : `group-${groupIndex}`,
+      name: typeof normalizedGroup.name === "string" ? normalizedGroup.name : "",
+      required: normalizedGroup.required !== false,
+      selectionMode: normalizedGroup.selectionMode === "multiple" ? "multiple" : "single",
+      sourceCategoryIds: Array.isArray(normalizedGroup.sourceCategoryIds)
+        ? normalizedGroup.sourceCategoryIds.map(String)
+        : [],
+      choices: choices.map((choice, choiceIndex) => {
+        const normalizedChoice = (choice && typeof choice === "object" ? choice : {}) as {
+          id?: unknown;
+          name?: unknown;
+          priceDelta?: unknown;
+        };
+        return {
+          id: typeof normalizedChoice.id === "string" ? normalizedChoice.id : `choice-${groupIndex}-${choiceIndex}`,
+          name: typeof normalizedChoice.name === "string" ? normalizedChoice.name : "",
+          priceDelta: normalizedChoice.priceDelta != null ? String(normalizedChoice.priceDelta) : "",
+        };
+      }),
+    };
+  });
+}
+
+function buildProductOptionsPayload(options: ProductOptionGroup[]) {
+  return options
+    .map((group) => {
+      const choices = group.choices
+        .map((choice) => ({
+          id: choice.id,
+          name: choice.name.trim(),
+          priceDelta: choice.priceDelta === "" ? 0 : parseFloat(choice.priceDelta) || 0,
+        }))
+        .filter((choice) => choice.name);
+      const sourceCategoryIds = group.sourceCategoryIds.map((id) => parseInt(id)).filter((id) => id > 0);
+
+      return {
+        id: group.id,
+        name: group.name.trim(),
+        required: group.required,
+        selectionMode: group.selectionMode,
+        sourceCategoryIds,
+        choices,
+      };
+    })
+    .filter((group) => group.name && (group.choices.length > 0 || group.sourceCategoryIds.length > 0));
+}
+
+function buildCrustConfigPayload(form: FormState): CrustConfig {
+  return {
+    enabled: form.crustEnabled,
+    allowedCategoryIds: form.crustAllowedCategoryIds.map((id) => parseInt(id)).filter((id) => id > 0),
+  };
+}
+
 function formFromItem(item: {
   name: string;
   description: string | null;
@@ -77,10 +234,16 @@ function formFromItem(item: {
   sortOrder: number;
   prices: unknown;
   availableSizes: unknown;
+  flavorConfig?: unknown;
+  crustConfig?: unknown;
+  addons?: { id: number }[];
+  productOptions?: unknown;
 }): FormState {
   const prices = item.prices as Record<string, number>;
   const sizes = item.availableSizes as string[];
   const isUnico = sizes.length === 1 && sizes[0] === "unico";
+  const flavorConfig = normalizeFlavorConfig(item.flavorConfig);
+  const crustConfig = normalizeCrustConfig(item.crustConfig);
   return {
     name: item.name,
     description: item.description ?? "",
@@ -96,6 +259,18 @@ function formFromItem(item: {
       size: s.key,
       price: prices[s.key] !== undefined ? String(prices[s.key]) : "",
     })),
+    flavorEnabled: flavorConfig.enabled,
+    flavorMax: String(flavorConfig.maxFlavors),
+    flavorMaxBySize: Object.fromEntries(PIZZA_SIZES.map((s) => [
+      s.key,
+      flavorConfig.maxFlavorsBySize[s.key] ? String(flavorConfig.maxFlavorsBySize[s.key]) : "",
+    ])),
+    flavorAllowedCategoryIds: flavorConfig.allowedCategoryIds.map(String),
+    flavorPriceMode: flavorConfig.priceMode,
+    crustEnabled: crustConfig.enabled,
+    crustAllowedCategoryIds: crustConfig.allowedCategoryIds.map(String),
+    addonIds: Array.isArray(item.addons) ? item.addons.map((addon) => String(addon.id)) : [],
+    productOptions: normalizeProductOptions(item.productOptions),
   };
 }
 
@@ -103,6 +278,7 @@ export default function AdminMenu() {
   const utils = trpc.useUtils();
   const { data: categories } = trpc.categories.list.useQuery({ onlyActive: false });
   const { data: pizzas, isLoading } = trpc.pizzas.list.useQuery({ onlyActive: false });
+  const { data: addons } = trpc.addons.list.useQuery({ onlyActive: true });
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -127,6 +303,16 @@ export default function AdminMenu() {
       setDialogOpen(false);
     },
     onError: (e) => toast.error("Erro ao atualizar item", { description: e.message }),
+  });
+
+  const updateCategory = trpc.categories.update.useMutation({
+    onSuccess: () => {
+      toast.success("Categoria atualizada!");
+      utils.categories.list.invalidate();
+      utils.pizzas.list.invalidate();
+      utils.pizzas.featured.invalidate();
+    },
+    onError: (e) => toast.error("Erro ao atualizar categoria", { description: e.message }),
   });
 
   const deleteItem = trpc.pizzas.delete.useMutation({
@@ -161,6 +347,126 @@ export default function AdminMenu() {
     }));
   }
 
+  function setFlavorSizeLimit(sizeKey: string, value: string) {
+    setForm((f) => ({
+      ...f,
+      flavorMaxBySize: { ...f.flavorMaxBySize, [sizeKey]: value },
+    }));
+  }
+
+  function toggleFlavorCategory(categoryId: string) {
+    setForm((f) => ({
+      ...f,
+      flavorAllowedCategoryIds: f.flavorAllowedCategoryIds.includes(categoryId)
+        ? f.flavorAllowedCategoryIds.filter((id) => id !== categoryId)
+        : [...f.flavorAllowedCategoryIds, categoryId],
+    }));
+  }
+
+  function toggleCrustCategory(categoryId: string) {
+    setForm((f) => ({
+      ...f,
+      crustAllowedCategoryIds: f.crustAllowedCategoryIds.includes(categoryId)
+        ? f.crustAllowedCategoryIds.filter((id) => id !== categoryId)
+        : [...f.crustAllowedCategoryIds, categoryId],
+    }));
+  }
+
+  function toggleAddon(addonId: string) {
+    setForm((f) => ({
+      ...f,
+      addonIds: f.addonIds.includes(addonId)
+        ? f.addonIds.filter((id) => id !== addonId)
+        : [...f.addonIds, addonId],
+    }));
+  }
+
+  function addOptionGroup() {
+    setForm((f) => ({
+      ...f,
+      productOptions: [
+        ...f.productOptions,
+        {
+          id: makeOptionId("group"),
+          name: "",
+          required: true,
+          selectionMode: "single",
+          sourceCategoryIds: [],
+          choices: [
+            { id: makeOptionId("choice"), name: "", priceDelta: "" },
+            { id: makeOptionId("choice"), name: "", priceDelta: "" },
+          ],
+        },
+      ],
+    }));
+  }
+
+  function updateOptionGroup(groupId: string, patch: Partial<ProductOptionGroup>) {
+    setForm((f) => ({
+      ...f,
+      productOptions: f.productOptions.map((group) => group.id === groupId ? { ...group, ...patch } : group),
+    }));
+  }
+
+  function toggleOptionCategory(groupId: string, categoryId: string) {
+    setForm((f) => ({
+      ...f,
+      productOptions: f.productOptions.map((group) =>
+        group.id === groupId
+          ? {
+              ...group,
+              sourceCategoryIds: group.sourceCategoryIds.includes(categoryId)
+                ? group.sourceCategoryIds.filter((id) => id !== categoryId)
+                : [...group.sourceCategoryIds, categoryId],
+            }
+          : group
+      ),
+    }));
+  }
+
+  function removeOptionGroup(groupId: string) {
+    setForm((f) => ({
+      ...f,
+      productOptions: f.productOptions.filter((group) => group.id !== groupId),
+    }));
+  }
+
+  function addOptionChoice(groupId: string) {
+    setForm((f) => ({
+      ...f,
+      productOptions: f.productOptions.map((group) =>
+        group.id === groupId
+          ? { ...group, choices: [...group.choices, { id: makeOptionId("choice"), name: "", priceDelta: "" }] }
+          : group
+      ),
+    }));
+  }
+
+  function updateOptionChoice(groupId: string, choiceId: string, patch: Partial<ProductOptionChoice>) {
+    setForm((f) => ({
+      ...f,
+      productOptions: f.productOptions.map((group) =>
+        group.id === groupId
+          ? {
+              ...group,
+              choices: group.choices.map((choice) => choice.id === choiceId ? { ...choice, ...patch } : choice),
+            }
+          : group
+      ),
+    }));
+  }
+
+  function removeOptionChoice(groupId: string, choiceId: string) {
+    setForm((f) => ({
+      ...f,
+      productOptions: f.productOptions.map((group) =>
+        group.id === groupId
+          ? { ...group, choices: group.choices.filter((choice) => choice.id !== choiceId) }
+          : group
+      ),
+    }));
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) { toast.error("Nome é obrigatório"); return; }
@@ -180,6 +486,10 @@ export default function AdminMenu() {
       sortOrder: parseInt(form.sortOrder) || 0,
       prices,
       availableSizes,
+      flavorConfig: buildFlavorConfigPayload(form),
+      crustConfig: buildCrustConfigPayload(form),
+      productOptions: buildProductOptionsPayload(form.productOptions),
+      addonIds: form.addonIds.map((id) => parseInt(id)).filter((id) => id > 0),
     };
 
     if (editingId) {
@@ -207,6 +517,37 @@ export default function AdminMenu() {
           <Plus className="w-4 h-4" />
           Novo Item
         </Button>
+      </div>
+
+      {/* Categories management */}
+      <div className="bg-card border border-border rounded-xl p-4 mb-6">
+        <div className="flex items-center justify-between gap-4 mb-3">
+          <div>
+            <h2 className="font-serif text-lg font-semibold text-foreground">Categorias</h2>
+            <p className="text-xs text-muted-foreground">Ative ou desative categorias exibidas no cardapio publico.</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {categories?.map((cat) => (
+            <div
+              key={cat.id}
+              className={`flex items-center gap-3 rounded-full border px-3 py-2 ${
+                cat.active ? "border-border bg-background/40" : "border-border/40 bg-muted/30 opacity-60"
+              }`}
+            >
+              <span className="text-sm text-foreground">{cat.name}</span>
+              <Badge variant={cat.active ? "default" : "secondary"} className="text-[10px]">
+                {cat.active ? "Ativa" : "Inativa"}
+              </Badge>
+              <Switch
+                checked={cat.active}
+                disabled={updateCategory.isPending}
+                onCheckedChange={(active) => updateCategory.mutate({ id: cat.id, active })}
+                aria-label={`${cat.active ? "Desativar" : "Ativar"} categoria ${cat.name}`}
+              />
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Category filter */}
@@ -277,6 +618,12 @@ export default function AdminMenu() {
                       : `R$ ${minPrice.toFixed(2)} – ${maxPrice.toFixed(2)}`}
                   </p>
                   <p className="text-[10px] text-muted-foreground">{sizes.length} tamanho{sizes.length > 1 ? "s" : ""}</p>
+                  {(item as any).flavorConfig?.enabled && (
+                    <p className="text-[10px] text-primary">até {(item as any).flavorConfig.maxFlavors ?? 1} sabores</p>
+                  )}
+                  {Array.isArray((item as any).productOptions) && (item as any).productOptions.length > 0 && (
+                    <p className="text-[10px] text-primary">{(item as any).productOptions.length} opcao{(item as any).productOptions.length > 1 ? "es" : ""}</p>
+                  )}
                 </div>
                 <div className="flex gap-1 flex-shrink-0">
                   <Button variant="ghost" size="icon" onClick={() => openEdit(item)} className="h-8 w-8">
@@ -441,6 +788,336 @@ export default function AdminMenu() {
                 </div>
               </div>
             )}
+
+            <Separator />
+
+            {/* Crust options */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <Label htmlFor="crustEnabled" className="text-sm font-medium text-foreground cursor-pointer">
+                    Permitir borda recheada
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Escolha categorias com produtos de borda para aparecerem neste item.
+                  </p>
+                </div>
+                <Switch
+                  checked={form.crustEnabled}
+                  onCheckedChange={(v) => setField("crustEnabled", v)}
+                  id="crustEnabled"
+                />
+              </div>
+
+              {form.crustEnabled && (
+                <div className="rounded-xl border border-border p-4">
+                  <Label className="text-sm font-medium text-foreground mb-3 block">Categorias de borda</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {categories?.map((cat) => {
+                      const selected = form.crustAllowedCategoryIds.includes(String(cat.id));
+                      return (
+                        <button
+                          type="button"
+                          key={cat.id}
+                          onClick={() => toggleCrustCategory(String(cat.id))}
+                          className={`px-3 py-1.5 rounded-full text-xs border transition-all ${
+                            selected
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "border-border text-muted-foreground hover:border-primary/50"
+                          }`}
+                        >
+                          {cat.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Cadastre as bordas como produtos em uma categoria propria e selecione essa categoria aqui.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <Separator />
+
+            {/* Addons */}
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium text-foreground">Adicionais</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Marque os adicionais ativos que o cliente podera selecionar neste produto.
+                </p>
+              </div>
+
+              {addons && addons.length > 0 ? (
+                <div className="rounded-xl border border-border p-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {addons.map((addon) => {
+                      const selected = form.addonIds.includes(String(addon.id));
+                      return (
+                        <button
+                          type="button"
+                          key={addon.id}
+                          onClick={() => toggleAddon(String(addon.id))}
+                          className={`p-3 rounded-xl border text-left transition-all ${
+                            selected
+                              ? "bg-primary/10 border-primary text-primary"
+                              : "border-border text-muted-foreground hover:border-primary/50"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-sm font-medium">{addon.name}</span>
+                            <span className="text-xs">R$ {Number(addon.price).toFixed(2)}</span>
+                          </div>
+                          {addon.description && (
+                            <p className="text-xs text-muted-foreground mt-1">{addon.description}</p>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+                  Cadastre adicionais ativos em Admin &gt; Adicionais para vincular ao produto.
+                </div>
+              )}
+            </div>
+
+            <Separator />
+
+            {/* Product options */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-foreground">Opcoes do produto</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Configure escolhas como arroz do sushi, ponto, molho ou qualquer variacao do item.
+                  </p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={addOptionGroup} className="border-border gap-2">
+                  <Plus className="w-3.5 h-3.5" />
+                  Adicionar
+                </Button>
+              </div>
+
+              {form.productOptions.length > 0 && (
+                <div className="space-y-3">
+                  {form.productOptions.map((group) => (
+                    <div key={group.id} className="rounded-xl border border-border p-4 space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-3 items-end">
+                        <div>
+                          <Label className="text-xs text-muted-foreground mb-1.5 block">Nome da opcao</Label>
+                          <Input
+                            value={group.name}
+                            onChange={(e) => updateOptionGroup(group.id, { name: e.target.value })}
+                            placeholder="Ex: Arroz"
+                            className="bg-input border-border"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2 pb-2">
+                          <Switch
+                            checked={group.required}
+                            onCheckedChange={(checked) => updateOptionGroup(group.id, { required: checked })}
+                            id={`required-${group.id}`}
+                          />
+                          <Label htmlFor={`required-${group.id}`} className="text-xs text-foreground cursor-pointer">
+                            Obrigatorio
+                          </Label>
+                        </div>
+                        <div className="flex items-center gap-2 pb-2">
+                          <Switch
+                            checked={group.selectionMode === "multiple"}
+                            onCheckedChange={(checked) => updateOptionGroup(group.id, { selectionMode: checked ? "multiple" : "single" })}
+                            id={`multiple-${group.id}`}
+                          />
+                          <Label htmlFor={`multiple-${group.id}`} className="text-xs text-foreground cursor-pointer">
+                            Varios adicionais
+                          </Label>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeOptionGroup(group.id)}
+                          className="h-9 w-9 hover:text-destructive"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+
+                      <div>
+                        <Label className="text-xs text-muted-foreground mb-2 block">Categorias de adicionais</Label>
+                        <div className="flex flex-wrap gap-2">
+                          {categories?.map((cat) => {
+                            const selected = group.sourceCategoryIds.includes(String(cat.id));
+                            return (
+                              <button
+                                type="button"
+                                key={cat.id}
+                                onClick={() => toggleOptionCategory(group.id, String(cat.id))}
+                                className={`px-3 py-1.5 rounded-full text-xs border transition-all ${
+                                  selected
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "border-border text-muted-foreground hover:border-primary/50"
+                                }`}
+                              >
+                                {cat.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Produtos dessas categorias aparecem como adicionais com o preco cadastrado.
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        {group.choices.map((choice) => (
+                          <div key={choice.id} className="grid grid-cols-[1fr_100px_auto] gap-2 items-center">
+                            <Input
+                              value={choice.name}
+                              onChange={(e) => updateOptionChoice(group.id, choice.id, { name: e.target.value })}
+                              placeholder="Ex: Com arroz"
+                              className="bg-input border-border h-8 text-sm"
+                            />
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={choice.priceDelta}
+                              onChange={(e) => updateOptionChoice(group.id, choice.id, { priceDelta: e.target.value })}
+                              placeholder="+ R$"
+                              className="bg-input border-border h-8 text-sm"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeOptionChoice(group.id, choice.id)}
+                              className="h-8 w-8 hover:text-destructive"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => addOptionChoice(group.id)}
+                        className="text-primary hover:text-primary hover:bg-primary/10"
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1" />
+                        Nova escolha
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <Separator />
+
+            {/* Flavor selection */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <Label htmlFor="flavorEnabled" className="text-sm font-medium text-foreground cursor-pointer">
+                    Permitir seleção de sabores
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Use para meio a meio, Trem, Bi-Trem, sushi ou combos com escolha de sabores.
+                  </p>
+                </div>
+                <Switch
+                  checked={form.flavorEnabled}
+                  onCheckedChange={(v) => setField("flavorEnabled", v)}
+                  id="flavorEnabled"
+                />
+              </div>
+
+              {form.flavorEnabled && (
+                <div className="space-y-4 rounded-xl border border-border p-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-foreground mb-1.5 block">Quantidade máxima de sabores</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="20"
+                        value={form.flavorMax}
+                        onChange={(e) => setField("flavorMax", e.target.value)}
+                        className="bg-input border-border"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-foreground mb-1.5 block">Preço quando misturar</Label>
+                      <Select value={form.flavorPriceMode} onValueChange={(v) => setField("flavorPriceMode", v as FlavorPriceMode)}>
+                        <SelectTrigger className="bg-input border-border">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-card border-border">
+                          <SelectItem value="average">Média dos sabores</SelectItem>
+                          <SelectItem value="base">Preço do item principal</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {form.priceMode === "sizes" && (
+                    <div>
+                      <Label className="text-sm font-medium text-foreground mb-3 block">
+                        Limite por tamanho <span className="text-muted-foreground font-normal">(opcional)</span>
+                      </Label>
+                      <div className="grid grid-cols-2 gap-3">
+                        {PIZZA_SIZES.map((s) => (
+                          <div key={s.key} className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground w-28 flex-shrink-0">{s.label}</span>
+                            <Input
+                              type="number"
+                              min="1"
+                              max="20"
+                              value={form.flavorMaxBySize[s.key] ?? ""}
+                              onChange={(e) => setFlavorSizeLimit(s.key, e.target.value)}
+                              placeholder={form.flavorMax}
+                              className="bg-input border-border h-8 text-sm"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <Label className="text-sm font-medium text-foreground mb-3 block">Categorias que podem ser selecionadas</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {categories?.map((cat) => {
+                        const selected = form.flavorAllowedCategoryIds.includes(String(cat.id));
+                        return (
+                          <button
+                            type="button"
+                            key={cat.id}
+                            onClick={() => toggleFlavorCategory(String(cat.id))}
+                            className={`px-3 py-1.5 rounded-full text-xs border transition-all ${
+                              selected
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "border-border text-muted-foreground hover:border-primary/50"
+                            }`}
+                          >
+                            {cat.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Se nenhuma categoria for marcada, o cliente escolhe itens da mesma categoria.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <Separator />
 

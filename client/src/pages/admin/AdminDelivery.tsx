@@ -155,13 +155,27 @@ export default function AdminDelivery() {
     if (!orderDetail) return;
 
     const itemsHtml = orderDetail.items
-      .map((item) => `
+      .map((item) => {
+        const addonsTotal = item.addons?.reduce((sum, addon) => sum + Number(addon.totalPrice ?? 0), 0) ?? 0;
+        const productTotal = Number(item.totalPrice ?? 0) - addonsTotal;
+        const addonsHtml = item.addons?.length
+          ? item.addons.map((addon) => `
+            <div class="row muted">
+              <span>&nbsp;&nbsp;+ ${escapeHtml(addon.addonName)}</span>
+              <span>${formatCurrency(addon.addonPrice)}</span>
+            </div>
+          `).join("")
+          : "";
+        return `
         <p class="bold">${escapeHtml(item.quantity)}x ${escapeHtml(item.pizzaName)}</p>
         <div class="row muted">
           <span>${escapeHtml(item.sizeLabel)}${item.crustLabel ? ` - Borda ${escapeHtml(item.crustLabel)}` : ""}</span>
-          <span>${formatCurrency(item.totalPrice)}</span>
+          <span>${formatCurrency(productTotal)}</span>
         </div>
-      `)
+        ${addonsHtml}
+        <div class="row muted"><span>Total item</span><span>${formatCurrency(item.totalPrice)}</span></div>
+      `;
+      })
       .join("");
 
     printDocument(
@@ -204,10 +218,16 @@ export default function AdminDelivery() {
     if (!orderDetail) return;
 
     const itemsHtml = orderDetail.items
-      .map((item) => `
+      .map((item) => {
+        const addonsHtml = item.addons?.length
+          ? item.addons.map((addon) => `<p class="muted">&nbsp;&nbsp;+ ${escapeHtml(addon.addonName)}</p>`).join("")
+          : "";
+        return `
         <p class="bold large">${escapeHtml(item.quantity)}x ${escapeHtml(item.pizzaName)}</p>
         <p class="muted">${escapeHtml(item.sizeLabel)}${item.crustLabel ? ` - Borda ${escapeHtml(item.crustLabel)}` : ""}</p>
-      `)
+        ${addonsHtml}
+      `;
+      })
       .join("");
 
     printDocument(
@@ -413,6 +433,15 @@ export default function AdminDelivery() {
                           {item.sizeLabel}
                           {item.crustLabel ? ` - Borda ${item.crustLabel}` : ""}
                         </p>
+                        {item.addons && item.addons.length > 0 && (
+                          <div className="mt-1 space-y-0.5">
+                            {item.addons.map((addon) => (
+                              <p key={addon.id} className="text-xs text-muted-foreground">
+                                + {addon.addonName} - R$ {Number(addon.addonPrice).toFixed(2)}
+                              </p>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <span className="text-foreground">R$ {Number(item.totalPrice).toFixed(2)}</span>
                     </div>

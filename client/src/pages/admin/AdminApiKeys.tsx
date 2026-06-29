@@ -51,6 +51,60 @@ const ORDER_PAYLOAD_EXAMPLE = `{
   ]
 }`;
 
+const CATEGORY_PAYLOAD_EXAMPLE = `{
+  "name": "Pizzas Tradicionais",
+  "slug": "pizzas-tradicionais",
+  "description": "Sabores classicos da casa",
+  "sortOrder": 1,
+  "active": true
+}`;
+
+const PRODUCT_PAYLOAD_EXAMPLE = `{
+  "erpCode": "PIZ-CAL-G",
+  "name": "Pizza Calabresa",
+  "description": "Calabresa, cebola e mussarela",
+  "categoryId": 1,
+  "prices": { "media": 39.9, "grande": 59.9 },
+  "availableSizes": ["media", "grande"],
+  "flavorConfig": {
+    "enabled": true,
+    "maxFlavors": 2,
+    "allowedCategoryIds": [1],
+    "priceMode": "average"
+  },
+  "crustConfig": {
+    "enabled": true,
+    "allowedCategoryIds": [3]
+  },
+  "productOptions": [],
+  "active": true,
+  "featured": false
+}`;
+
+const MENU_CONFIG_PAYLOAD_EXAMPLE = `{
+  "flavorConfig": {
+    "enabled": true,
+    "maxFlavors": 2,
+    "maxFlavorsBySize": { "media": 2, "grande": 3 },
+    "allowedCategoryIds": [1, 2],
+    "priceMode": "average"
+  },
+  "crustConfig": {
+    "enabled": true,
+    "allowedCategoryIds": [3]
+  },
+  "productOptions": [
+    {
+      "id": "bebida",
+      "name": "Bebida",
+      "required": false,
+      "selectionMode": "single",
+      "sourceCategoryIds": [4],
+      "choices": []
+    }
+  ]
+}`;
+
 export default function AdminApiKeys() {
   const [newKeyName, setNewKeyName] = useState("");
   const [createdKey, setCreatedKey] = useState<string | null>(null);
@@ -139,13 +193,49 @@ export default function AdminApiKeys() {
               <span className="text-blue-400">POST</span> /api/erp/products/sync
               <div className="text-muted-foreground">Criar/atualizar produto do ERP</div>
             </div>
+            <div className="bg-muted rounded p-2">
+              <span className="text-blue-400">POST</span> /api/erp/categories/sync
+              <div className="text-muted-foreground">Criar/atualizar categoria do cardapio</div>
+            </div>
+            <div className="bg-muted rounded p-2">
+              <span className="text-amber-400">PATCH</span> /api/erp/products/:id/menu-config
+              <div className="text-muted-foreground">Atualizar regras do cardapio por produto</div>
+            </div>
+            <div className="bg-muted rounded p-2">
+              <span className="text-amber-400">PATCH</span> /api/erp/products/erp/:erpCode/menu-config
+              <div className="text-muted-foreground">Atualizar regras usando codigo ERP</div>
+            </div>
           </div>
           <p className="text-xs">
-            <strong className="text-amber-400">Fluxo sugerido:</strong> sistemas externos podem enviar pedidos com{" "}
-            <code className="bg-muted px-1 rounded">POST /api/erp/orders</code>. ERPs/PDVs podem consultar{" "}
+            <strong className="text-amber-400">Fluxo sugerido:</strong> cadastre categorias com{" "}
+            <code className="bg-muted px-1 rounded">POST /api/erp/categories/sync</code>, depois envie produtos com{" "}
+            <code className="bg-muted px-1 rounded">POST /api/erp/products/sync</code>. O campo{" "}
+            <code className="bg-muted px-1 rounded">erpCode</code> mantém o vínculo entre ERP e cardapio. Para pedidos,
+            ERPs/PDVs podem consultar{" "}
             <code className="bg-muted px-1 rounded">/api/erp/orders/new</code> a cada 30-60 segundos e atualizar o
             status para <code className="bg-muted px-1 rounded">preparing</code>.
           </p>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <div>
+              <p className="text-xs font-medium text-foreground mb-1">Categoria</p>
+              <pre className="overflow-x-auto rounded bg-muted p-3 text-xs text-muted-foreground h-64">
+                {CATEGORY_PAYLOAD_EXAMPLE}
+              </pre>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-foreground mb-1">Produto</p>
+              <pre className="overflow-x-auto rounded bg-muted p-3 text-xs text-muted-foreground h-64">
+                {PRODUCT_PAYLOAD_EXAMPLE}
+              </pre>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-foreground mb-1">Regras do cardapio</p>
+              <pre className="overflow-x-auto rounded bg-muted p-3 text-xs text-muted-foreground h-64">
+                {MENU_CONFIG_PAYLOAD_EXAMPLE}
+              </pre>
+            </div>
+          </div>
+          <p className="text-xs font-medium text-foreground">Exemplo de pedido vindo de fora</p>
           <pre className="overflow-x-auto rounded bg-muted p-3 text-xs text-muted-foreground">
             {ORDER_PAYLOAD_EXAMPLE}
           </pre>

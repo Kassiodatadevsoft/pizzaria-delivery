@@ -35,6 +35,10 @@ interface PizzaCardProps {
     imageUrl?: string | null;
     prices: unknown;
     availableSizes: unknown;
+    flavorConfig?: unknown;
+    crustConfig?: unknown;
+    productOptions?: unknown;
+    addons?: unknown;
     featured?: boolean;
     categoryId: number;
   };
@@ -50,6 +54,8 @@ export default function PizzaCard({ pizza, allPizzas }: PizzaCardProps) {
   const isMultiSize = sizes.length > 1;
   const isSinglePrice = sizes.length === 1;
   const isPizza = isPizzaProduct(sizes);
+  const hasProductOptions = Array.isArray(pizza.productOptions) && pizza.productOptions.length > 0;
+  const hasAddons = Array.isArray(pizza.addons) && pizza.addons.length > 0;
   const firstPrice = Object.values(prices)[0] ?? 0;
   const firstSize = sizes[0] ?? "unico";
 
@@ -83,6 +89,10 @@ export default function PizzaCard({ pizza, allPizzas }: PizzaCardProps) {
     prices,
     availableSizes: sizes,
     categoryId: pizza.categoryId,
+    flavorConfig: pizza.flavorConfig as PizzaItem["flavorConfig"],
+    crustConfig: pizza.crustConfig as PizzaItem["crustConfig"],
+    productOptions: pizza.productOptions as PizzaItem["productOptions"],
+    addons: pizza.addons as PizzaItem["addons"],
   };
 
   const allPizzaItems: PizzaItem[] = allPizzas.map((p) => ({
@@ -93,6 +103,10 @@ export default function PizzaCard({ pizza, allPizzas }: PizzaCardProps) {
     prices: p.prices as Record<string, number>,
     availableSizes: p.availableSizes as string[],
     categoryId: p.categoryId,
+    flavorConfig: p.flavorConfig as PizzaItem["flavorConfig"],
+    crustConfig: p.crustConfig as PizzaItem["crustConfig"],
+    productOptions: p.productOptions as PizzaItem["productOptions"],
+    addons: p.addons as PizzaItem["addons"],
   }));
 
   return (
@@ -155,14 +169,14 @@ export default function PizzaCard({ pizza, allPizzas }: PizzaCardProps) {
           )}
 
           {/* CTA Button */}
-          {isPizza || isMultiSize ? (
+          {isPizza || isMultiSize || hasProductOptions || hasAddons ? (
             <Button
               onClick={handleOpenModal}
               size="sm"
               className="w-full bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground border border-primary/30 font-semibold transition-all mt-auto gap-1.5"
             >
               <Settings2 className="w-3.5 h-3.5" />
-              {isPizza ? "Personalizar" : "Escolher tamanho"}
+              {isPizza || hasProductOptions || hasAddons ? "Personalizar" : "Escolher tamanho"}
             </Button>
           ) : (
             <Button
@@ -178,7 +192,7 @@ export default function PizzaCard({ pizza, allPizzas }: PizzaCardProps) {
       </div>
 
       {/* Modal de personalização */}
-      {(isPizza || isMultiSize) && (
+      {(isPizza || isMultiSize || hasProductOptions || hasAddons) && (
         <PizzaOrderModal
           pizza={pizzaItem}
           allPizzas={allPizzaItems}

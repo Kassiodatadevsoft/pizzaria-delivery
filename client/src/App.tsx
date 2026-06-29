@@ -15,6 +15,7 @@ import AdminOrders from "./pages/admin/AdminOrders";
 import AdminDelivery from "./pages/admin/AdminDelivery";
 import AdminDeliveryClosing from "./pages/admin/AdminDeliveryClosing";
 import AdminMenu from "./pages/admin/AdminMenu";
+import AdminAddons from "./pages/admin/AdminAddons";
 import ShareLink from "./pages/ShareLink";
 import AdminApiKeys from "./pages/admin/AdminApiKeys";
 import Navbar from "./components/Navbar";
@@ -33,6 +34,7 @@ function Router() {
       <Route path="/admin/delivery" component={() => <AdminLayout><AdminDelivery /></AdminLayout>} />
       <Route path="/admin/delivery/fechamento" component={() => <AdminLayout><AdminDeliveryClosing /></AdminLayout>} />
       <Route path="/admin/cardapio" component={() => <AdminLayout><AdminMenu /></AdminLayout>} />
+      <Route path="/admin/adicionais" component={() => <AdminLayout><AdminAddons /></AdminLayout>} />
       <Route path="/admin/compartilhar" component={() => <AdminLayout><ShareLink /></AdminLayout>} />
       <Route path="/admin/api-keys" component={() => <AdminLayout><AdminApiKeys /></AdminLayout>} />
       <Route path="/compartilhar" component={ShareLink} />

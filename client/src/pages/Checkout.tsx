@@ -24,7 +24,12 @@ const DELIVERY_OPTIONS: { value: DeliveryType; label: string; price: number }[] 
   { value: "KM 100", label: "KM 100", price: 7 },
 ];
 
+type CheckoutCartItem = ReturnType<typeof useCart>["items"][number];
 
+function formatItemNameForOrder(item: CheckoutCartItem) {
+  const options = item.selectedOptions?.map((option) => `${option.groupName}: ${option.choiceName}`) ?? [];
+  return options.length ? `${item.pizzaName} (${options.join(", ")})` : item.pizzaName;
+}
 
 export default function Checkout() {
   const { items, subtotal, clearCart } = useCart();
@@ -102,13 +107,18 @@ export default function Checkout() {
       deliveryType: form.deliveryType,
       items: items.map((item) => ({
         pizzaId: item.pizzaId,
-        pizzaName: item.pizzaName,
+        pizzaName: formatItemNameForOrder(item),
         secondFlavorId: item.secondFlavorId,
         secondFlavorName: item.secondFlavorName,
         size: item.size,
         sizeLabel: item.sizeLabel,
         crust: item.crust,
         crustPrice: item.crustPrice,
+        addons: item.selectedAddons?.map((addon) => ({
+          addonId: addon.addonId,
+          addonName: addon.addonName,
+          addonPrice: addon.addonPrice,
+        })) ?? [],
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         totalPrice: item.totalPrice,
@@ -357,7 +367,21 @@ export default function Checkout() {
                           {item.crustLabel && (
                             <span className="text-amber-500/80 text-xs">Borda {item.crustLabel}</span>
                           )}
+                          {item.selectedOptions?.map((option) => (
+                            <span key={option.groupId} className="text-muted-foreground text-xs">
+                              {option.groupName}: {option.choiceName}
+                            </span>
+                          ))}
                         </div>
+                        {item.selectedAddons && item.selectedAddons.length > 0 && (
+                          <div className="mt-1 space-y-0.5">
+                            {item.selectedAddons.map((addon) => (
+                              <p key={addon.addonId} className="text-muted-foreground text-xs">
+                                + {addon.addonName} - R$ {addon.addonPrice.toFixed(2)}
+                              </p>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <span className="text-foreground font-medium flex-shrink-0">
                         R$ {item.totalPrice.toFixed(2)}

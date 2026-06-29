@@ -16,6 +16,18 @@ export interface CartItem {
   crust?: string;       // ex: "mussarela", "cheddar", "catupiry", "4queijos", "chocolate"
   crustLabel?: string;  // ex: "Mussarela"
   crustPrice?: number;  // preço adicional da borda
+  selectedOptions?: {
+    groupId: string;
+    groupName: string;
+    choiceId: string;
+    choiceName: string;
+    priceDelta?: number;
+  }[];
+  selectedAddons?: {
+    addonId: number;
+    addonName: string;
+    addonPrice: number;
+  }[];
   quantity: number;
   unitPrice: number;    // preço base (pizza + borda)
   totalPrice: number;   // unitPrice * quantity
@@ -41,6 +53,12 @@ function makeItemId(item: Omit<CartItem, "id" | "totalPrice">): string {
   if (item.extraFlavorIds?.length) parts.push(item.extraFlavorIds.join("."));
   else if (item.secondFlavorId) parts.push(item.secondFlavorId);
   if (item.crust) parts.push(item.crust);
+  if (item.selectedOptions?.length) {
+    parts.push(item.selectedOptions.map((option) => `${option.groupId}:${option.choiceId}`).join("."));
+  }
+  if (item.selectedAddons?.length) {
+    parts.push(item.selectedAddons.map((addon) => `addon:${addon.addonId}`).sort().join("."));
+  }
   return parts.join("-");
 }
 

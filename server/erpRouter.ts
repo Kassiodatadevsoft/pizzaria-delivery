@@ -1,19 +1,106 @@
 import { Router, Request, Response } from "express";
 import { createHash, randomBytes } from "crypto";
 import { nanoid } from "nanoid";
+import { z } from "zod";
 import {
   createOrder,
   getApiKeyByHash,
+  getCategoryById,
   getCategoriesForErp,
   getOrderById,
   getOrdersWithItems,
+  getPizzaByErpCode,
+  getPizzaById,
   getProductsForErp,
   touchApiKey,
+  updateCategory,
   updateOrderStatus,
+  updatePizza,
+  upsertCategoryBySlug,
   upsertPizzaByErpCode,
 } from "./db";
 
 export const erpRouter = Router();
+
+const flavorConfigSchema = z.object({
+  enabled: z.boolean(),
+  maxFlavors: z.number().int().min(1).max(20),
+  maxFlavorsBySize: z.record(z.string(), z.number().int().min(1).max(20)).optional(),
+  allowedCategoryIds: z.array(z.number().int().positive()).optional(),
+  priceMode: z.enum(["average", "base"]).optional(),
+});
+
+const crustConfigSchema = z.object({
+  enabled: z.boolean(),
+  allowedCategoryIds: z.array(z.number().int().positive()).optional(),
+});
+
+const productOptionChoiceSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  priceDelta: z.number().optional(),
+});
+
+const productOptionGroupSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  required: z.boolean(),
+  selectionMode: z.enum(["single", "multiple"]).optional(),
+  sourceCategoryIds: z.array(z.number().int().positive()).optional(),
+  choices: z.array(productOptionChoiceSchema).optional().default([]),
+});
+
+const productUpdateSchema = z.object({
+  erpCode: z.string().max(100).nullable().optional(),
+  name: z.string().min(1).optional(),
+  description: z.string().nullable().optional(),
+  imageUrl: z.string().nullable().optional(),
+  categoryId: z.number().int().positive().optional(),
+  prices: z.record(z.string(), z.number()).optional(),
+  availableSizes: z.array(z.string().min(1)).optional(),
+  flavorConfig: flavorConfigSchema.optional(),
+  crustConfig: crustConfigSchema.optional(),
+  productOptions: z.array(productOptionGroupSchema).optional(),
+  active: z.boolean().optional(),
+  featured: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+const productMenuConfigSchema = productUpdateSchema.pick({
+  flavorConfig: true,
+  crustConfig: true,
+  productOptions: true,
+});
+
+const categorySyncSchema = z.object({
+  id: z.number().int().positive().optional(),
+  name: z.string().min(1),
+  slug: z.string().min(1).optional(),
+  description: z.string().nullable().optional(),
+  sortOrder: z.number().int().optional(),
+  active: z.boolean().optional(),
+});
+
+function formatZodError(error: z.ZodError) {
+  return error.issues.map((issue) => ({
+    campo: issue.path.join(".") || "body",
+    mensagem: issue.message,
+  }));
+}
+
+function slugify(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-");
+}
+
+function hasAnyValue(value: Record<string, unknown>) {
+  return Object.keys(value).length > 0;
+}
 
 async function requireApiKey(req: Request, res: Response, next: Function) {
   const authHeader = req.headers.authorization;
@@ -272,7 +359,7 @@ erpRouter.get("/products", requireApiKey, async (req: Request, res: Response) =>
 
 erpRouter.post("/products/sync", requireApiKey, async (req: Request, res: Response) => {
   try {
-    const { erpCode, name, description, categoryId, prices, availableSizes, active = true, featured = false } = req.body;
+    const { erpCode, name, description, imageUrl, categoryId, prices, availableSizes, flavorConfig, crustConfig, productOptions, active = true, featured = false, sortOrder = 0 } = req.body;
 
     if (!erpCode || !name || !categoryId || !prices || !availableSizes) {
       return res.status(400).json({
@@ -281,17 +368,23 @@ erpRouter.post("/products/sync", requireApiKey, async (req: Request, res: Respon
       });
     }
 
-    const result = await upsertPizzaByErpCode({
+    const productPayload = {
       erpCode,
       name,
       description: description || null,
       categoryId: parseInt(categoryId),
       prices,
       availableSizes,
+      imageUrl: imageUrl || null,
       active: Boolean(active),
       featured: Boolean(featured),
-      sortOrder: 0,
-    });
+      sortOrder: Number.isInteger(sortOrder) ? sortOrder : 0,
+      ...(flavorConfig !== undefined ? { flavorConfig } : {}),
+      ...(crustConfig !== undefined ? { crustConfig } : {}),
+      ...(productOptions !== undefined ? { productOptions } : {}),
+    };
+
+    const result = await upsertPizzaByErpCode(productPayload);
 
     return res.status(result.action === "criado" ? 201 : 200).json({
       success: true,
@@ -306,12 +399,140 @@ erpRouter.post("/products/sync", requireApiKey, async (req: Request, res: Respon
   }
 });
 
+erpRouter.patch("/products/:id", requireApiKey, async (req: Request, res: Response) => {
+  try {
+    const productId = parseInt(req.params.id);
+    if (!Number.isInteger(productId) || productId <= 0) {
+      return res.status(400).json({ error: "produto_id invalido" });
+    }
+
+    const parsed = productUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Payload invalido", detalhes: formatZodError(parsed.error) });
+    }
+    if (!hasAnyValue(parsed.data)) {
+      return res.status(400).json({ error: "Informe ao menos um campo para atualizar" });
+    }
+
+    const product = await getPizzaById(productId);
+    if (!product) return res.status(404).json({ error: `Produto #${productId} nao encontrado` });
+
+    await updatePizza(productId, parsed.data);
+    return res.json({ success: true, produto_id: productId, atualizado: Object.keys(parsed.data) });
+  } catch (err) {
+    console.error("[ERP] Erro ao atualizar produto:", err);
+    return res.status(500).json({ error: "Erro interno do servidor" });
+  }
+});
+
+erpRouter.patch("/products/:id/menu-config", requireApiKey, async (req: Request, res: Response) => {
+  try {
+    const productId = parseInt(req.params.id);
+    if (!Number.isInteger(productId) || productId <= 0) {
+      return res.status(400).json({ error: "produto_id invalido" });
+    }
+
+    const parsed = productMenuConfigSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Payload invalido", detalhes: formatZodError(parsed.error) });
+    }
+    if (!hasAnyValue(parsed.data)) {
+      return res.status(400).json({
+        error: "Informe flavorConfig, crustConfig ou productOptions para atualizar",
+      });
+    }
+
+    const product = await getPizzaById(productId);
+    if (!product) return res.status(404).json({ error: `Produto #${productId} nao encontrado` });
+
+    await updatePizza(productId, parsed.data);
+    return res.json({
+      success: true,
+      produto_id: productId,
+      configuracoes_atualizadas: Object.keys(parsed.data),
+    });
+  } catch (err) {
+    console.error("[ERP] Erro ao atualizar configuracoes do cardapio:", err);
+    return res.status(500).json({ error: "Erro interno do servidor" });
+  }
+});
+
+erpRouter.patch("/products/erp/:erpCode/menu-config", requireApiKey, async (req: Request, res: Response) => {
+  try {
+    const erpCode = req.params.erpCode?.trim();
+    if (!erpCode) return res.status(400).json({ error: "erpCode obrigatorio" });
+
+    const parsed = productMenuConfigSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Payload invalido", detalhes: formatZodError(parsed.error) });
+    }
+    if (!hasAnyValue(parsed.data)) {
+      return res.status(400).json({
+        error: "Informe flavorConfig, crustConfig ou productOptions para atualizar",
+      });
+    }
+
+    const product = await getPizzaByErpCode(erpCode);
+    if (!product) return res.status(404).json({ error: `Produto ERP ${erpCode} nao encontrado` });
+
+    await updatePizza(product.id, parsed.data);
+    return res.json({
+      success: true,
+      produto_id: product.id,
+      erp_code: erpCode,
+      configuracoes_atualizadas: Object.keys(parsed.data),
+    });
+  } catch (err) {
+    console.error("[ERP] Erro ao atualizar configuracoes do cardapio por ERP:", err);
+    return res.status(500).json({ error: "Erro interno do servidor" });
+  }
+});
+
 erpRouter.get("/categories", requireApiKey, async (_req: Request, res: Response) => {
   try {
     const categorias = await getCategoriesForErp();
     return res.json({ total: categorias.length, categorias });
   } catch (err) {
     console.error("[ERP] Erro ao listar categorias:", err);
+    return res.status(500).json({ error: "Erro interno do servidor" });
+  }
+});
+
+erpRouter.post("/categories/sync", requireApiKey, async (req: Request, res: Response) => {
+  try {
+    const parsed = categorySyncSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Payload invalido", detalhes: formatZodError(parsed.error) });
+    }
+
+    const { id, name, description, sortOrder, active } = parsed.data;
+    const slug = parsed.data.slug ?? slugify(name);
+    if (!slug) return res.status(400).json({ error: "slug invalido" });
+
+    const payload = {
+      name,
+      slug,
+      description: description ?? null,
+      sortOrder: sortOrder ?? 0,
+      active: active ?? true,
+    };
+
+    if (id) {
+      const category = await getCategoryById(id);
+      if (!category) return res.status(404).json({ error: `Categoria #${id} nao encontrada` });
+      await updateCategory(id, payload);
+      return res.json({ success: true, acao: "atualizado", categoria_id: id, slug });
+    }
+
+    const result = await upsertCategoryBySlug(payload);
+    return res.status(result.action === "criado" ? 201 : 200).json({
+      success: true,
+      acao: result.action,
+      categoria_id: result.id,
+      slug,
+    });
+  } catch (err) {
+    console.error("[ERP] Erro ao sincronizar categoria:", err);
     return res.status(500).json({ error: "Erro interno do servidor" });
   }
 });

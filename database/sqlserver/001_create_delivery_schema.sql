@@ -46,6 +46,9 @@ BEGIN
     imageUrl NVARCHAR(MAX) NULL,
     prices NVARCHAR(MAX) NOT NULL,
     availableSizes NVARCHAR(MAX) NOT NULL,
+    flavorConfig NVARCHAR(MAX) NOT NULL CONSTRAINT DF_delivery_pizzas_flavorConfig DEFAULT N'{"enabled":false,"maxFlavors":1,"maxFlavorsBySize":{},"allowedCategoryIds":[],"priceMode":"average"}',
+    crustConfig NVARCHAR(MAX) NOT NULL CONSTRAINT DF_delivery_pizzas_crustConfig DEFAULT N'{"enabled":false,"allowedCategoryIds":[]}',
+    productOptions NVARCHAR(MAX) NOT NULL CONSTRAINT DF_delivery_pizzas_productOptions DEFAULT N'[]',
     erpCode NVARCHAR(100) NULL,
     featured BIT NOT NULL CONSTRAINT DF_delivery_pizzas_featured DEFAULT 0,
     active BIT NOT NULL CONSTRAINT DF_delivery_pizzas_active DEFAULT 1,
@@ -54,12 +57,42 @@ BEGIN
     updatedAt DATETIME2 NOT NULL CONSTRAINT DF_delivery_pizzas_updatedAt DEFAULT SYSUTCDATETIME(),
     CONSTRAINT FK_delivery_pizzas_category FOREIGN KEY (categoryId) REFERENCES delivery.pizza_categories(id),
     CONSTRAINT CK_delivery_pizzas_prices_json CHECK (ISJSON(prices) = 1),
-    CONSTRAINT CK_delivery_pizzas_availableSizes_json CHECK (ISJSON(availableSizes) = 1)
+    CONSTRAINT CK_delivery_pizzas_availableSizes_json CHECK (ISJSON(availableSizes) = 1),
+    CONSTRAINT CK_delivery_pizzas_flavorConfig_json CHECK (ISJSON(flavorConfig) = 1),
+    CONSTRAINT CK_delivery_pizzas_crustConfig_json CHECK (ISJSON(crustConfig) = 1),
+    CONSTRAINT CK_delivery_pizzas_productOptions_json CHECK (ISJSON(productOptions) = 1)
   );
 
   CREATE UNIQUE INDEX UX_delivery_pizzas_erpCode
     ON delivery.pizzas(erpCode)
     WHERE erpCode IS NOT NULL;
+END;
+GO
+
+IF COL_LENGTH('delivery.pizzas', 'flavorConfig') IS NULL
+BEGIN
+  ALTER TABLE delivery.pizzas
+    ADD flavorConfig NVARCHAR(MAX) NOT NULL
+      CONSTRAINT DF_delivery_pizzas_flavorConfig
+      DEFAULT N'{"enabled":false,"maxFlavors":1,"maxFlavorsBySize":{},"allowedCategoryIds":[],"priceMode":"average"}';
+END;
+GO
+
+IF COL_LENGTH('delivery.pizzas', 'productOptions') IS NULL
+BEGIN
+  ALTER TABLE delivery.pizzas
+    ADD productOptions NVARCHAR(MAX) NOT NULL
+      CONSTRAINT DF_delivery_pizzas_productOptions
+      DEFAULT N'[]';
+END;
+GO
+
+IF COL_LENGTH('delivery.pizzas', 'crustConfig') IS NULL
+BEGIN
+  ALTER TABLE delivery.pizzas
+    ADD crustConfig NVARCHAR(MAX) NOT NULL
+      CONSTRAINT DF_delivery_pizzas_crustConfig
+      DEFAULT N'{"enabled":false,"allowedCategoryIds":[]}';
 END;
 GO
 
@@ -75,6 +108,42 @@ BEGIN
     createdAt DATETIME2 NOT NULL CONSTRAINT DF_delivery_api_keys_createdAt DEFAULT SYSUTCDATETIME(),
     updatedAt DATETIME2 NOT NULL CONSTRAINT DF_delivery_api_keys_updatedAt DEFAULT SYSUTCDATETIME()
   );
+END;
+GO
+
+IF OBJECT_ID(N'delivery.adicional', N'U') IS NULL
+BEGIN
+  CREATE TABLE delivery.adicional (
+    id INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_delivery_adicional PRIMARY KEY,
+    GUIDENTIDADE NVARCHAR(64) NOT NULL,
+    nome NVARCHAR(150) NOT NULL,
+    descricao NVARCHAR(MAX) NULL,
+    preco DECIMAL(10,2) NOT NULL,
+    ativo BIT NOT NULL CONSTRAINT DF_delivery_adicional_ativo DEFAULT 1,
+    createdAt DATETIME2 NOT NULL CONSTRAINT DF_delivery_adicional_createdAt DEFAULT SYSUTCDATETIME(),
+    updatedAt DATETIME2 NOT NULL CONSTRAINT DF_delivery_adicional_updatedAt DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT CK_delivery_adicional_preco CHECK (preco >= 0)
+  );
+
+  CREATE INDEX IX_delivery_adicional_guid_ativo_nome
+    ON delivery.adicional(GUIDENTIDADE, ativo, nome);
+END;
+GO
+
+IF OBJECT_ID(N'delivery.produto_adicional', N'U') IS NULL
+BEGIN
+  CREATE TABLE delivery.produto_adicional (
+    productId INT NOT NULL,
+    addonId INT NOT NULL,
+    GUIDENTIDADE NVARCHAR(64) NOT NULL,
+    createdAt DATETIME2 NOT NULL CONSTRAINT DF_delivery_produto_adicional_createdAt DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT PK_delivery_produto_adicional PRIMARY KEY (productId, addonId, GUIDENTIDADE),
+    CONSTRAINT FK_delivery_produto_adicional_produto FOREIGN KEY (productId) REFERENCES delivery.pizzas(id),
+    CONSTRAINT FK_delivery_produto_adicional_adicional FOREIGN KEY (addonId) REFERENCES delivery.adicional(id)
+  );
+
+  CREATE INDEX IX_delivery_produto_adicional_guid_product
+    ON delivery.produto_adicional(GUIDENTIDADE, productId);
 END;
 GO
 
@@ -117,6 +186,12 @@ BEGIN
 END;
 GO
 
+IF COL_LENGTH('delivery.orders', 'deliveryType') IS NULL
+BEGIN
+  ALTER TABLE delivery.orders ADD deliveryType NVARCHAR(20) NULL;
+END;
+GO
+
 IF OBJECT_ID(N'delivery.order_items', N'U') IS NULL
 BEGIN
   CREATE TABLE delivery.order_items (
@@ -140,5 +215,29 @@ BEGIN
   );
 
   CREATE INDEX IX_delivery_order_items_orderId ON delivery.order_items(orderId);
+END;
+GO
+
+IF OBJECT_ID(N'delivery.pedido_item_adicional', N'U') IS NULL
+BEGIN
+  CREATE TABLE delivery.pedido_item_adicional (
+    id INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_delivery_pedido_item_adicional PRIMARY KEY,
+    orderItemId INT NOT NULL,
+    addonId INT NULL,
+    addonName NVARCHAR(150) NOT NULL,
+    addonPrice DECIMAL(10,2) NOT NULL,
+    quantity INT NOT NULL CONSTRAINT DF_delivery_pedido_item_adicional_quantity DEFAULT 1,
+    totalPrice DECIMAL(10,2) NOT NULL,
+    GUIDENTIDADE NVARCHAR(64) NOT NULL,
+    createdAt DATETIME2 NOT NULL CONSTRAINT DF_delivery_pedido_item_adicional_createdAt DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT FK_delivery_pedido_item_adicional_item FOREIGN KEY (orderItemId) REFERENCES delivery.order_items(id),
+    CONSTRAINT FK_delivery_pedido_item_adicional_adicional FOREIGN KEY (addonId) REFERENCES delivery.adicional(id),
+    CONSTRAINT CK_delivery_pedido_item_adicional_price CHECK (addonPrice >= 0),
+    CONSTRAINT CK_delivery_pedido_item_adicional_quantity CHECK (quantity > 0),
+    CONSTRAINT CK_delivery_pedido_item_adicional_total CHECK (totalPrice >= 0)
+  );
+
+  CREATE INDEX IX_delivery_pedido_item_adicional_item
+    ON delivery.pedido_item_adicional(orderItemId);
 END;
 GO

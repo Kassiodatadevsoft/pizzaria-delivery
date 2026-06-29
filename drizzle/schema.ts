@@ -50,6 +50,10 @@ export type Pizza = {
   imageUrl: string | null;
   prices: Record<string, number>;
   availableSizes: string[];
+  flavorConfig: FlavorConfig;
+  crustConfig: CrustConfig;
+  productOptions: ProductOptionGroup[];
+  addons?: Addon[];
   erpCode: string | null;
   featured: boolean;
   active: boolean;
@@ -65,10 +69,67 @@ export type InsertPizza = {
   imageUrl?: string | null;
   prices: Record<string, number>;
   availableSizes: string[];
+  flavorConfig?: FlavorConfig;
+  crustConfig?: CrustConfig;
+  productOptions?: ProductOptionGroup[];
   erpCode?: string | null;
   featured?: boolean;
   active?: boolean;
   sortOrder?: number;
+};
+
+export type Addon = {
+  id: number;
+  guidEntidade: string;
+  name: string;
+  description: string | null;
+  price: string;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type InsertAddon = {
+  guidEntidade?: string;
+  name: string;
+  description?: string | null;
+  price: string;
+  active?: boolean;
+};
+
+export type ProductAddon = {
+  productId: number;
+  addonId: number;
+  guidEntidade: string;
+  createdAt: Date;
+};
+
+export type FlavorConfig = {
+  enabled: boolean;
+  maxFlavors: number;
+  maxFlavorsBySize?: Record<string, number>;
+  allowedCategoryIds?: number[];
+  priceMode?: "average" | "base";
+};
+
+export type CrustConfig = {
+  enabled: boolean;
+  allowedCategoryIds?: number[];
+};
+
+export type ProductOptionGroup = {
+  id: string;
+  name: string;
+  required: boolean;
+  selectionMode?: "single" | "multiple";
+  sourceCategoryIds?: number[];
+  choices: ProductOptionChoice[];
+};
+
+export type ProductOptionChoice = {
+  id: string;
+  name: string;
+  priceDelta?: number;
 };
 
 export type ApiKey = {
@@ -140,7 +201,26 @@ export type OrderItem = {
   quantity: number;
   unitPrice: string;
   totalPrice: string;
+  addons?: OrderItemAddon[];
   createdAt: Date;
 };
 
-export type InsertOrderItem = Omit<OrderItem, "id" | "createdAt">;
+export type InsertOrderItem = Omit<OrderItem, "id" | "createdAt" | "addons"> & {
+  addons?: InsertOrderItemAddon[];
+};
+
+export type OrderItemAddon = {
+  id: number;
+  orderItemId: number;
+  addonId: number | null;
+  addonName: string;
+  addonPrice: string;
+  quantity: number;
+  totalPrice: string;
+  guidEntidade: string;
+  createdAt: Date;
+};
+
+export type InsertOrderItemAddon = Omit<OrderItemAddon, "id" | "orderItemId" | "createdAt"> & {
+  orderItemId?: number;
+};

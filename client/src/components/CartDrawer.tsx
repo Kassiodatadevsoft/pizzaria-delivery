@@ -65,7 +65,21 @@ export default function CartDrawer() {
                       {item.crustLabel && (
                         <span className="text-xs text-amber-500/80">• Borda {item.crustLabel}</span>
                       )}
+                      {item.selectedOptions?.map((option) => (
+                        <span key={option.groupId} className="text-xs text-muted-foreground">
+                          {option.groupName}: {option.choiceName}
+                        </span>
+                      ))}
                     </div>
+                    {item.selectedAddons && item.selectedAddons.length > 0 && (
+                      <div className="mt-1 space-y-0.5">
+                        {item.selectedAddons.map((addon) => (
+                          <p key={addon.addonId} className="text-xs text-muted-foreground">
+                            + {addon.addonName} - R$ {addon.addonPrice.toFixed(2)}
+                          </p>
+                        ))}
+                      </div>
+                    )}
                     <p className="text-xs text-primary font-semibold mt-0.5">
                       R$ {item.unitPrice.toFixed(2)} / un.
                     </p>

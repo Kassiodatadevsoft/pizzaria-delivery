@@ -12,6 +12,7 @@ import {
   MessageCircle,
   ReceiptText,
   ShoppingBag,
+  PlusCircle,
   Truck,
   User,
   UtensilsCrossed,
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
   { href: "/admin/delivery", label: "Delivery Online", icon: Truck },
   { href: "/admin/delivery/fechamento", label: "Fechamento", icon: ReceiptText },
   { href: "/admin/cardapio", label: "Cardapio", icon: UtensilsCrossed },
+  { href: "/admin/adicionais", label: "Adicionais", icon: PlusCircle },
   { href: "/admin/compartilhar", label: "Compartilhar Link", icon: MessageCircle },
   { href: "/admin/api-keys", label: "API Keys (ERP)", icon: Key },
 ];
